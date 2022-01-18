@@ -23,7 +23,7 @@ type Message interface {
 type NodeID string
 
 // msgs from the reactor which may update the state
-type msgInfo struct {
+type MsgInfo struct {
 	Msg    Message `json:"msg"`
 	PeerID NodeID  `json:"peer_key"`
 }
@@ -331,13 +331,13 @@ type SimpleState struct {
 
 	// state changes may be triggered by: msgs from peers,
 	// msgs from ourself, or by timeouts
-	peerMsgQueue     chan msgInfo
-	internalMsgQueue chan msgInfo
+	peerMsgQueue     chan MsgInfo
+	internalMsgQueue chan MsgInfo
 	timeoutTicker    TimeoutTicker
 
 	// information about about added votes and block parts are written on this channel
 	// so statistics can be computed by reactor
-	statsMsgQueue chan msgInfo
+	statsMsgQueue chan MsgInfo
 
 	// a Write-Ahead Log ensures we can recover from any kind of crash
 	// and helps us avoid signing conflicting votes
@@ -382,10 +382,10 @@ func NewSimpleState(
 		config:           cfg,
 		blockExec:        blockExec,
 		blockStore:       blockStore,
-		peerMsgQueue:     make(chan msgInfo, msgQueueSize),
-		internalMsgQueue: make(chan msgInfo, msgQueueSize),
+		peerMsgQueue:     make(chan MsgInfo, msgQueueSize),
+		internalMsgQueue: make(chan MsgInfo, msgQueueSize),
 		timeoutTicker:    NewTimeoutTicker(logger),
-		statsMsgQueue:    make(chan msgInfo, msgQueueSize),
+		statsMsgQueue:    make(chan MsgInfo, msgQueueSize),
 		done:             make(chan struct{}),
 		doWALCatchup:     true,
 		// wal:              nilWAL{},
@@ -758,7 +758,7 @@ func (cs *SimpleState) scheduleTimeout(duration time.Duration, height int64, rou
 }
 
 // send a msg into the receiveRoutine regarding our own proposal, block part, or vote
-func (cs *SimpleState) sendInternalMessage(ctx context.Context, mi msgInfo) {
+func (cs *SimpleState) sendInternalMessage(ctx context.Context, mi MsgInfo) {
 	select {
 	case <-ctx.Done():
 	case cs.internalMsgQueue <- mi:
@@ -969,7 +969,7 @@ func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
 		}
 
 		rs := cs.RoundState
-		var mi msgInfo
+		var mi MsgInfo
 
 		select {
 
@@ -1021,7 +1021,7 @@ func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
 }
 
 // state transitions on complete-proposal, 2/3-any, 2/3-one
-func (cs *SimpleState) handleMsg(ctx context.Context, mi msgInfo) {
+func (cs *SimpleState) handleMsg(ctx context.Context, mi MsgInfo) {
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
 
@@ -2097,7 +2097,7 @@ func (cs *SimpleState) signAddVote(ctx context.Context, msgType SignedMsgType, b
 	vote, err := cs.signVote(msgType, blockID)
 	if err == nil {
 		// TODO:
-		cs.sendInternalMessage(ctx, msgInfo{&VoteMessage{}, ""})
+		cs.sendInternalMessage(ctx, MsgInfo{&VoteMessage{}, ""})
 		cs.logger.Debug("signed and pushed vote", "height", cs.Height, "round", cs.Round, "vote", vote)
 		return vote
 	}
