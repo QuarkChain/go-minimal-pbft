@@ -64,8 +64,49 @@ func init() {
 	decoder[2] = decodeVote
 }
 
-func (p *ProposalRaw) toProposal() *consensus.Proposal {
-	return &consensus.Proposal{
+// Vote represents a prevote, precommit, or commit vote from validators for
+// consensus.
+type VoteRaw struct {
+	Type             uint32
+	Height           uint64
+	Round            uint32
+	BlockID          common.Hash
+	Timestamp        uint64
+	ValidatorAddress common.Address
+	ValidatorIndex   uint32
+	Signature        []byte
+}
+
+func (v *VoteRaw) toVote() (*consensus.Vote, error) {
+	cv := &consensus.Vote{
+		Type:             consensus.SignedMsgType(v.Type),
+		Height:           int64(v.Height),
+		Round:            int32(v.Round),
+		BlockID:          v.BlockID,
+		Timestamp:        int64(v.Timestamp),
+		ValidatorAddress: v.ValidatorAddress,
+		ValidatorIndex:   int32(v.ValidatorIndex),
+		Signature:        v.Signature,
+	}
+	return cv, cv.ValidateBasic()
+}
+
+func encodeVote(v *consensus.Vote) ([]byte, error) {
+	vr := &VoteRaw{
+		Type:             uint32(v.Type),
+		Height:           uint64(v.Height),
+		Round:            uint32(v.Round),
+		BlockID:          v.BlockID,
+		Timestamp:        uint64(v.Timestamp),
+		ValidatorAddress: v.ValidatorAddress,
+		ValidatorIndex:   uint32(v.ValidatorIndex),
+		Signature:        v.Signature,
+	}
+	return rlp.EncodeToBytes(vr)
+}
+
+func (p *ProposalRaw) toProposal() (*consensus.Proposal, error) {
+	cp := &consensus.Proposal{
 		Height:    int64(p.Height),
 		Round:     int32(p.Round),
 		POLRound:  int32(p.POLRound),
@@ -73,12 +114,16 @@ func (p *ProposalRaw) toProposal() *consensus.Proposal {
 		Timestamp: int64(p.Timestamp),
 		Signature: p.Signature,
 	}
+	return cp, cp.ValidateBasic()
 }
 
 func decodeProposal(data []byte) (interface{}, error) {
 	var p ProposalRaw
 	err := rlp.DecodeBytes(data, &p)
-	return p.toProposal(), err
+	if err != nil {
+		return nil, err
+	}
+	return p.toProposal()
 }
 
 func encodeProposal(p *consensus.Proposal) ([]byte, error) {
@@ -94,9 +139,12 @@ func encodeProposal(p *consensus.Proposal) ([]byte, error) {
 }
 
 func decodeVote(data []byte) (interface{}, error) {
-	var p consensus.Proposal
-	err := rlp.DecodeBytes(data, p)
-	return p, err
+	var v VoteRaw
+	err := rlp.DecodeBytes(data, &v)
+	if err != nil {
+		return nil, err
+	}
+	return v.toVote()
 }
 
 func decode(data []byte) (interface{}, error) {
@@ -112,7 +160,7 @@ func decode(data []byte) (interface{}, error) {
 }
 
 func Run(obsvC chan *consensus.MsgInfo,
-	sendC chan []byte,
+	sendC chan consensus.Message,
 	priv crypto.PrivKey,
 	port uint,
 	networkID string,
@@ -242,11 +290,29 @@ func Run(obsvC chan *consensus.MsgInfo,
 				case <-ctx.Done():
 					return
 				case msg := <-sendC:
-					err := th.Publish(ctx, msg)
-					p2pMessagesSent.Inc()
+					var err error
+					var data []byte
+					switch m := msg.(type) {
+					case *consensus.Proposal:
+						data, err = encodeProposal(m)
+						if err == nil {
+							err = th.Publish(ctx, data)
+							p2pMessagesSent.Inc()
+						}
+					case *consensus.Vote:
+						data, err = encodeVote(m)
+						if err == nil {
+							err = th.Publish(ctx, data)
+							p2pMessagesSent.Inc()
+						}
+					default:
+						log.Error("unrecognized data to sent")
+					}
+
 					if err != nil {
 						log.Error("failed to publish message from queue", zap.Error(err))
 					}
+
 				}
 			}
 		}()
