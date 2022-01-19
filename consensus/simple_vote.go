@@ -3,7 +3,6 @@ package consensus
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/tendermint/tendermint/crypto"
@@ -24,7 +23,7 @@ type Vote struct {
 	Height           int64          `json:"height"`
 	Round            int32          `json:"round"`    // assume there will not be greater than 2_147_483_647 rounds
 	BlockID          common.Hash    `json:"block_id"` // zero if vote is nil.
-	Timestamp        time.Time      `json:"timestamp"`
+	Timestamp        int64          `json:"timestamp"`
 	ValidatorAddress common.Address `json:"validator_address"`
 	ValidatorIndex   int32          `json:"validator_index"`
 	Signature        []byte         `json:"signature"`

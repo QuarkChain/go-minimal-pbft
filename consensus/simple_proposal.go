@@ -3,9 +3,26 @@ package consensus
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 )
+
+// Now returns the current time in UTC with no monotonic component.
+func CanonicalNow() time.Time {
+	return Canonical(time.Now())
+}
+
+func CanonicalNowMs() int64 {
+	return time.Now().UnixMilli()
+}
+
+// Canonical returns UTC time with no monotonic component.
+// Stripping the monotonic component is for time equality.
+// See https://github.com/tendermint/tendermint/pull/2203#discussion_r215064334
+func Canonical(t time.Time) time.Time {
+	return t.Round(0).UTC()
+}
 
 // Proposal defines a block proposal for the consensus.
 // It refers to the block by BlockID field.
@@ -18,13 +35,20 @@ type Proposal struct {
 	Round     int32       `json:"round"`     // there can not be greater than 2_147_483_647 rounds
 	POLRound  int32       `json:"pol_round"` // -1 if null.
 	BlockID   common.Hash `json:"block_id"`
+	Timestamp int64       `json:"timestamp"` // unix ms
 	Signature []byte      `json:"signature"`
 }
 
 // NewProposal returns a new Proposal.
 // If there is no POLRound, polRound should be -1.
 func NewProposal(height int64, round int32, polRound int32, blockID common.Hash) *Proposal {
-	return &Proposal{}
+	return &Proposal{
+		Height:    height,
+		Round:     round,
+		POLRound:  polRound,
+		BlockID:   blockID,
+		Timestamp: CanonicalNowMs(),
+	}
 }
 
 func (p *Proposal) ToUnsignedBytes() []byte {

@@ -223,7 +223,7 @@ const (
 type CommitSig struct {
 	BlockIDFlag      BlockIDFlag    `json:"block_id_flag"`
 	ValidatorAddress common.Address `json:"validator_address"`
-	Timestamp        time.Time      `json:"timestamp"`
+	Timestamp        int64          `json:"timestamp"` // epoch
 	Signature        []byte         `json:"signature"`
 }
 
@@ -2056,7 +2056,7 @@ func (cs *SimpleState) signVote(
 // It ensures that for a prior block with a BFT-timestamp of T,
 // any vote from this validator will have time at least time T + 1ms.
 // This is needed, as monotonicity of time is a guarantee that BFT time provides.
-func (cs *SimpleState) voteTime() time.Time {
+func (cs *SimpleState) voteTime() int64 {
 	now := tmtime.Now()
 	minVoteTime := now
 	// Minimum time increment between blocks
@@ -2071,9 +2071,9 @@ func (cs *SimpleState) voteTime() time.Time {
 	}
 
 	if now.After(minVoteTime) {
-		return now
+		return now.UnixMilli()
 	}
-	return minVoteTime
+	return minVoteTime.UnixMilli()
 }
 
 // sign the vote and publish on internalMsgQueue

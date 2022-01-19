@@ -50,9 +50,10 @@ var (
 type ProposalRaw struct {
 	Height    uint64
 	Round     uint32
-	POLRound  uint32      `json:"pol_round"` // -1 if null.
-	BlockID   common.Hash `json:"block_id"`
-	Signature []byte      `json:"signature"`
+	POLRound  uint32
+	BlockID   common.Hash
+	Timestamp uint64
+	Signature []byte
 }
 
 func init() {
@@ -69,6 +70,7 @@ func (p *ProposalRaw) toProposal() *consensus.Proposal {
 		Round:     int32(p.Round),
 		POLRound:  int32(p.POLRound),
 		BlockID:   p.BlockID,
+		Timestamp: int64(p.Timestamp),
 		Signature: p.Signature,
 	}
 }
@@ -85,6 +87,7 @@ func encodeProposal(p *consensus.Proposal) ([]byte, error) {
 		Round:     uint32(p.Round),
 		POLRound:  uint32(p.POLRound),
 		BlockID:   p.BlockID,
+		Timestamp: uint64(p.Timestamp),
 		Signature: p.Signature,
 	}
 	return rlp.EncodeToBytes(pr)
