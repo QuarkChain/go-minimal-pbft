@@ -83,8 +83,8 @@ type BlockStore interface {
 }
 
 type BlockExecutor interface {
-	ValidateBlock(*Block) error
-	ApplyBlock(context.Context, ChainState, *Block) (ChainState, error)
+	ValidateBlock(ChainState, *Block) error                             // validate the block by tentatively executing it
+	ApplyBlock(context.Context, ChainState, *Block) (ChainState, error) // apply the block
 }
 
 // ConsensusConfig defines the configuration for the Tendermint consensus service,
@@ -264,7 +264,7 @@ type ChainState struct {
 	// LastBlockHeight=0 at genesis (ie. block(H=0) does not exist)
 	LastBlockHeight uint64
 	LastBlockID     common.Hash
-	LastBlockTime   time.Time
+	LastBlockTime   int64
 
 	// LastValidators is used to validate block.LastCommit.
 	// Validators are persisted to the database separately every time they change,
@@ -1397,7 +1397,7 @@ func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height uint64, roun
 
 	// Validate proposal block
 	// TODO(validate the block)
-	err := cs.blockExec.ValidateBlock(cs.ProposalBlock)
+	err := cs.blockExec.ValidateBlock(cs.state, cs.ProposalBlock)
 	if err != nil {
 		// ProposalBlock is invalid, prevote nil.
 		log.Error("prevote step: ProposalBlock is invalid", "height", height, "round", round, "err", err)
@@ -1517,7 +1517,7 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height uint64, round 
 		log.Debug("precommit step; +2/3 prevoted proposal block; locking", "height", height, "round", round, "hash", blockID)
 
 		// Validate the block.
-		if err := cs.blockExec.ValidateBlock(cs.ProposalBlock); err != nil {
+		if err := cs.blockExec.ValidateBlock(cs.state, cs.ProposalBlock); err != nil {
 			panic(fmt.Sprintf("precommit step; +2/3 prevoted for an invalid block: %v", err))
 		}
 
@@ -1671,7 +1671,7 @@ func (cs *SimpleState) finalizeCommit(ctx context.Context, height uint64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlock(block); err != nil {
+	if err := cs.blockExec.ValidateBlock(cs.state, block); err != nil {
 		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
 	}
 
@@ -2056,9 +2056,9 @@ func (cs *SimpleState) voteTime() int64 {
 	// even if cs.LockedBlock != nil. See https://docs.tendermint.com/master/spec/.
 	if cs.LockedBlock != nil {
 		// See the BFT time spec https://docs.tendermint.com/master/spec/consensus/bft-time.html
-		minVoteTime = cs.LockedBlock.Time + timeIota
+		minVoteTime = cs.LockedBlock.TimeMs + timeIota
 	} else if cs.ProposalBlock != nil {
-		minVoteTime = cs.ProposalBlock.Time + timeIota
+		minVoteTime = cs.ProposalBlock.TimeMs + timeIota
 	}
 
 	if now > minVoteTime {

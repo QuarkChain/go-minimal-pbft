@@ -102,10 +102,6 @@ func (vote *Vote) ValidateBasic() error {
 		return errors.New("invalid Type")
 	}
 
-	if vote.Height < 0 {
-		return errors.New("negative Height")
-	}
-
 	if vote.Round < 0 {
 		return errors.New("negative Round")
 	}

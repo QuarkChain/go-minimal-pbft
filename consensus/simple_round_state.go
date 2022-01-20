@@ -7,8 +7,11 @@ import (
 )
 
 type Block struct {
-	Height uint64
-	Time   int64 // TODO: convert to uint64
+	LastBlockID     common.Hash
+	Height          uint64
+	TimeMs          int64 // TODO: convert to uint64
+	ProposerAddress common.Address
+	LastCommit      *Commit
 }
 
 func (b *Block) Hash() common.Hash {
