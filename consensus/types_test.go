@@ -70,3 +70,24 @@ func TestSerdeBlock(t *testing.T) {
 	assert.Equal(t, b, nb)
 	assert.Equal(t, b.Hash(), nb.Hash())
 }
+
+func TestVoteSignBytes(t *testing.T) {
+	v := Vote{
+		Type:             PrecommitType,
+		Height:           20,
+		Round:            2,
+		BlockID:          common.Hash{},
+		TimestampMs:      352353,
+		ValidatorAddress: common.Address{},
+		ValidatorIndex:   3,
+		Signature:        []byte{},
+	}
+
+	bs0 := v.VoteSignBytes("aaa")
+	bs1 := v.VoteSignBytes("bbb")
+	assert.NotEqual(t, bs0, bs1)
+
+	v.Height = 21
+	bs2 := v.VoteSignBytes("aaa")
+	assert.NotEqual(t, bs0, bs2)
+}
