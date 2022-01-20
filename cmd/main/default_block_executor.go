@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -43,18 +44,18 @@ func validateBlock(state consensus.ChainState, block *consensus.Block) error {
 		)
 	}
 
-	// // Validate block LastCommit.
-	// if block.Height == state.InitialHeight {
-	// 	if len(block.LastCommit.Signatures) != 0 {
-	// 		return errors.New("initial block can't have LastCommit signatures")
-	// 	}
-	// } else {
-	// 	// LastCommit.Signatures length is checked in VerifyCommit.
-	// 	if err := state.LastValidators.VerifyCommit(
-	// 		state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
-	// 		return err
-	// 	}
-	// }
+	// Validate block LastCommit.
+	if block.Height == state.InitialHeight {
+		if len(block.LastCommit.Signatures) != 0 {
+			return errors.New("initial block can't have LastCommit signatures")
+		}
+	} else {
+		// LastCommit.Signatures length is checked in VerifyCommit.
+		if err := state.LastValidators.VerifyCommit(
+			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
+			return err
+		}
+	}
 
 	// NOTE: We can't actually verify it's the right proposer because we don't
 	// know what round the block was first proposed. So just check that it's

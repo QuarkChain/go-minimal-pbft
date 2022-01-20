@@ -20,3 +20,7 @@ func (v *Validator) Copy() *Validator {
 	vCopy := *v
 	return &vCopy
 }
+
+func (v *Validator) VotingPower() int64 {
+	return 1
+}

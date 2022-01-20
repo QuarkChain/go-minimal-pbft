@@ -29,7 +29,7 @@ type MsgInfo struct {
 }
 
 // SignedMsgType is a type of signed message in the consensus.
-type SignedMsgType int32
+type SignedMsgType byte
 
 const (
 	UnknownType SignedMsgType = 0
@@ -169,23 +169,6 @@ func (cs CommitSig) BlockID(commitBlockID common.Hash) common.Hash {
 		panic(fmt.Sprintf("Unknown BlockIDFlag: %v", cs.BlockIDFlag))
 	}
 	return blockID
-}
-
-// GetVote converts the CommitSig for the given valIdx to a Vote.
-// Returns nil if the precommit at valIdx is nil.
-// Panics if valIdx >= commit.Size().
-func (commit *Commit) GetVote(valIdx int32) *Vote {
-	commitSig := commit.Signatures[valIdx]
-	return &Vote{
-		Type:             PrecommitType,
-		Height:           commit.Height,
-		Round:            SafeConvertInt32FromUint32(commit.Round),
-		BlockID:          commit.BlockID,
-		TimestampMs:      commitSig.TimestampMs,
-		ValidatorAddress: commitSig.ValidatorAddress,
-		ValidatorIndex:   valIdx,
-		Signature:        commitSig.Signature,
-	}
 }
 
 // Consensus sentinel errors

@@ -86,6 +86,59 @@ func (commit *Commit) Hash() common.Hash {
 	return crypto.Keccak256Hash(data)
 }
 
+// GetVote converts the CommitSig for the given valIdx to a Vote.
+// Returns nil if the precommit at valIdx is nil.
+// Panics if valIdx >= commit.Size().
+func (commit *Commit) GetVote(valIdx int32) *Vote {
+	commitSig := commit.Signatures[valIdx]
+	return &Vote{
+		Type:             PrecommitType,
+		Height:           commit.Height,
+		Round:            SafeConvertInt32FromUint32(commit.Round),
+		BlockID:          commit.BlockID,
+		TimestampMs:      commitSig.TimestampMs,
+		ValidatorAddress: commitSig.ValidatorAddress,
+		ValidatorIndex:   valIdx,
+		Signature:        commitSig.Signature,
+	}
+}
+
+type VoteForSign struct {
+	Type        SignedMsgType
+	Height      uint64
+	Round       int32
+	BlockID     common.Hash
+	TimestampMs uint64
+	ChainID     string
+}
+
+// VoteSignBytes returns the proto-encoding of the canonicalized Vote, for
+// signing. Panics is the marshaling fails.
+//
+// The encoded Protobuf message is varint length-prefixed (using MarshalDelimited)
+// for backwards-compatibility with the Amino encoding, due to e.g. hardware
+// devices that rely on this encoding.
+//
+// See CanonicalizeVote
+func (commit *Commit) VoteSignBytes(chainID string, idx int32) []byte {
+	v := commit.GetVote(idx)
+
+	vs := VoteForSign{
+		Type:        v.Type,
+		Height:      v.Height,
+		Round:       v.Round,
+		BlockID:     v.BlockID,
+		TimestampMs: v.TimestampMs,
+		ChainID:     chainID,
+	}
+
+	data, err := rlp.EncodeToBytes(vs)
+	if err != nil {
+		panic("fail to encode vote")
+	}
+	return data
+}
+
 // NewCommit returns a new Commit.
 func NewCommit(height uint64, round int32, blockID common.Hash, commitSigs []CommitSig) *Commit {
 	return &Commit{
