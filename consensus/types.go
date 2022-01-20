@@ -5,20 +5,38 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 var MaxSignatureSize = 65
 
-type Block struct {
+type Header struct {
 	LastBlockID     common.Hash
 	Height          uint64
 	TimeMs          uint64
 	ProposerAddress common.Address
-	LastCommit      *Commit
+	CommitHash      common.Hash
+}
+
+type Block struct {
+	Header
+	Data       []byte
+	LastCommit *Commit
+}
+
+func (b *Block) fillHeader() {
+	b.CommitHash = b.LastCommit.Hash()
 }
 
 func (b *Block) Hash() common.Hash {
-	return common.Hash{}
+	b.fillHeader()
+
+	data, err := rlp.EncodeToBytes(b.Header)
+	if err != nil {
+		panic("fail to rlp Commit")
+	}
+	return crypto.Keccak256Hash(data)
 }
 
 // Commit contains the evidence that a block was committed by a set of validators.
@@ -36,7 +54,7 @@ type Commit struct {
 	// Memoized in first call to corresponding method.
 	// NOTE: can't memoize in constructor because constructor isn't used for
 	// unmarshaling.
-	// hash     common.Hash
+	// hash common.Hash
 	// bitArray *bits.BitArray
 }
 
@@ -58,6 +76,14 @@ func (commit *Commit) ValidateBasic() error {
 		}
 	}
 	return nil
+}
+
+func (commit *Commit) Hash() common.Hash {
+	data, err := rlp.EncodeToBytes(commit)
+	if err != nil {
+		panic("fail to rlp Commit")
+	}
+	return crypto.Keccak256Hash(data)
 }
 
 // NewCommit returns a new Commit.

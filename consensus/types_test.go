@@ -49,12 +49,17 @@ func TestSerdeBlock(t *testing.T) {
 		Signature:        []byte{},
 	}
 	cm := NewCommit(5, 6, common.Hash{}, []CommitSig{c})
+
 	b := Block{
-		LastBlockID:     common.Hash{},
-		Height:          6,
-		TimeMs:          34534,
-		ProposerAddress: common.Address{},
-		LastCommit:      cm,
+		Header: Header{
+			LastBlockID:     common.Hash{},
+			Height:          6,
+			TimeMs:          34534,
+			ProposerAddress: common.Address{},
+			CommitHash:      common.Hash{},
+		},
+		Data:       []byte{},
+		LastCommit: cm,
 	}
 
 	data, err := rlp.EncodeToBytes(b)
@@ -63,4 +68,5 @@ func TestSerdeBlock(t *testing.T) {
 	err = rlp.DecodeBytes(data, &nb)
 	assert.NoError(t, err)
 	assert.Equal(t, b, nb)
+	assert.Equal(t, b.Hash(), nb.Hash())
 }
