@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/tendermint/tendermint/crypto"
 )
 
 var MaxSignatureSize = 65
@@ -113,12 +112,6 @@ func (cs CommitSig) ValidateBasic() error {
 			return errors.New("signature is present")
 		}
 	default:
-		if len(cs.ValidatorAddress) != crypto.AddressSize {
-			return fmt.Errorf("expected ValidatorAddress size to be %d bytes, got %d bytes",
-				crypto.AddressSize,
-				len(cs.ValidatorAddress),
-			)
-		}
 		// NOTE: Timestamp validation is subtle and handled elsewhere.
 		if len(cs.Signature) == 0 {
 			return errors.New("signature is missing")
