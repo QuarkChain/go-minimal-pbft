@@ -63,3 +63,18 @@ func SafeConvertInt8(a int64) (int8, error) {
 	}
 	return int8(a), nil
 }
+
+func SafeConvertInt32FromUint32(a uint32) int32 {
+	b := int32(a)
+	if b < 0 {
+		panic(ErrOverflowInt32)
+	}
+	return b
+}
+
+func SafeConvertUint32FromInt32(a int32) uint32 {
+	if a < 0 {
+		panic(ErrOverflowInt32)
+	}
+	return uint32(a)
+}

@@ -527,7 +527,7 @@ func (hvs *HeightVoteSet) getVoteSet(round int32, voteType SignedMsgType) *VoteS
 // Panics if signatures from the commit can't be added to the voteset.
 // Inverse of VoteSet.MakeCommit().
 func CommitToVoteSet(chainID string, commit *Commit, vals *ValidatorSet) *VoteSet {
-	voteSet := NewVoteSet(chainID, commit.Height, commit.Round, PrecommitType, vals)
+	voteSet := NewVoteSet(chainID, commit.Height, SafeConvertInt32FromUint32(commit.Round), PrecommitType, vals)
 	for idx, commitSig := range commit.Signatures {
 		if commitSig.Absent() {
 			continue // OK, some precommits can be missing.

@@ -179,42 +179,12 @@ func (commit *Commit) GetVote(valIdx int32) *Vote {
 	return &Vote{
 		Type:             PrecommitType,
 		Height:           commit.Height,
-		Round:            commit.Round,
-		BlockID:          commitSig.BlockID(commit.BlockID),
+		Round:            SafeConvertInt32FromUint32(commit.Round),
+		BlockID:          commit.BlockID,
 		TimestampMs:      commitSig.TimestampMs,
 		ValidatorAddress: commitSig.ValidatorAddress,
 		ValidatorIndex:   valIdx,
 		Signature:        commitSig.Signature,
-	}
-}
-
-// BlockIDFlag indicates which BlockID the signature is for.
-type BlockIDFlag byte
-
-const (
-	// BlockIDFlagAbsent - no vote was received from a validator.
-	BlockIDFlagAbsent BlockIDFlag = iota + 1
-	// BlockIDFlagCommit - voted for the Commit.BlockID.
-	BlockIDFlagCommit
-	// BlockIDFlagNil - voted for nil.
-	BlockIDFlagNil
-)
-
-// CommitSig is a part of the Vote included in a Commit.
-type CommitSig struct {
-	BlockIDFlag      BlockIDFlag    `json:"block_id_flag"`
-	ValidatorAddress common.Address `json:"validator_address"`
-	TimestampMs      uint64         `json:"timestamp"` // epoch
-	Signature        []byte         `json:"signature"`
-}
-
-// NewCommit returns a new Commit.
-func NewCommit(height uint64, round int32, blockID common.Hash, commitSigs []CommitSig) *Commit {
-	return &Commit{
-		Height:     height,
-		Round:      round,
-		BlockID:    blockID,
-		Signatures: commitSigs,
 	}
 }
 
