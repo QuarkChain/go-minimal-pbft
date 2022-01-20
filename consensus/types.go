@@ -103,15 +103,6 @@ func (commit *Commit) GetVote(valIdx int32) *Vote {
 	}
 }
 
-type VoteForSign struct {
-	Type        SignedMsgType
-	Height      uint64
-	Round       int32
-	BlockID     common.Hash
-	TimestampMs uint64
-	ChainID     string
-}
-
 // VoteSignBytes returns the proto-encoding of the canonicalized Vote, for
 // signing. Panics is the marshaling fails.
 //
@@ -121,22 +112,7 @@ type VoteForSign struct {
 //
 // See CanonicalizeVote
 func (commit *Commit) VoteSignBytes(chainID string, idx int32) []byte {
-	v := commit.GetVote(idx)
-
-	vs := VoteForSign{
-		Type:        v.Type,
-		Height:      v.Height,
-		Round:       v.Round,
-		BlockID:     v.BlockID,
-		TimestampMs: v.TimestampMs,
-		ChainID:     chainID,
-	}
-
-	data, err := rlp.EncodeToBytes(vs)
-	if err != nil {
-		panic("fail to encode vote")
-	}
-	return data
+	return commit.GetVote(idx).VoteSignBytes(chainID)
 }
 
 // NewCommit returns a new Commit.

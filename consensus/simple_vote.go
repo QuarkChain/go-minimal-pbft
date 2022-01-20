@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/tendermint/tendermint/crypto"
 )
 
@@ -44,16 +45,38 @@ func (m *VoteMessage) String() string {
 	return fmt.Sprintf("[Vote %v]", m.Vote)
 }
 
-func VoteSignBytes(chainID string, vote *Vote) []byte {
-	// TODO: serialize to bytes
-	return nil
+type VoteForSign struct {
+	Type        SignedMsgType
+	Height      uint64
+	Round       uint32
+	BlockID     common.Hash
+	TimestampMs uint64
+	ChainID     string
+}
+
+// asusme it passes validate basic()
+func (vote *Vote) VoteSignBytes(chainID string) []byte {
+	vs := VoteForSign{
+		Type:        vote.Type,
+		Height:      vote.Height,
+		Round:       SafeConvertUint32FromInt32(vote.Round),
+		BlockID:     vote.BlockID,
+		TimestampMs: vote.TimestampMs,
+		ChainID:     chainID,
+	}
+
+	data, err := rlp.EncodeToBytes(vs)
+	if err != nil {
+		panic("fail to encode vote")
+	}
+	return data
 }
 
 func (vote *Vote) Verify(chainID string, pubKey PubKey) error {
 	if pubKey.Address() != vote.ValidatorAddress {
 		return ErrVoteInvalidValidatorAddress
 	}
-	if !pubKey.VerifySignature(VoteSignBytes(chainID, vote), vote.Signature) {
+	if !pubKey.VerifySignature(vote.VoteSignBytes(chainID), vote.Signature) {
 		return ErrVoteInvalidSignature
 	}
 	return nil
