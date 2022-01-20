@@ -368,7 +368,6 @@ type SimpleState struct {
 // NewState returns a new State.
 func NewSimpleState(
 	ctx context.Context,
-	logger log.Logger,
 	cfg *ConsensusConfig,
 	state ChainState,
 	blockExec BlockExecutor,
@@ -378,7 +377,6 @@ func NewSimpleState(
 	// options ...StateOption,
 ) *SimpleState {
 	cs := &SimpleState{
-		logger:           logger,
 		config:           cfg,
 		blockExec:        blockExec,
 		blockStore:       blockStore,
@@ -526,14 +524,14 @@ func (cs *SimpleState) OnStart(ctx context.Context) error {
 	// 			break LOOP
 
 	// 		case !IsDataCorruptionError(err):
-	// 			cs.logger.Error("error on catchup replay; proceeding to start state anyway", "err", err)
+	// 			log.Error("error on catchup replay; proceeding to start state anyway", "err", err)
 	// 			break LOOP
 
 	// 		case repairAttempted:
 	// 			return err
 	// 		}
 
-	// 		cs.logger.Error("the WAL file is corrupted; attempting repair", "err", err)
+	// 		log.Error("the WAL file is corrupted; attempting repair", "err", err)
 
 	// 		// 1) prep work
 	// 		if err := cs.wal.Stop(); err != nil {
@@ -549,15 +547,15 @@ func (cs *SimpleState) OnStart(ctx context.Context) error {
 	// 			return err
 	// 		}
 
-	// 		cs.logger.Debug("backed up WAL file", "src", cs.config.WalFile(), "dst", corruptedFile)
+	// 		log.Debug("backed up WAL file", "src", cs.config.WalFile(), "dst", corruptedFile)
 
 	// 		// 3) try to repair (WAL file will be overwritten!)
 	// 		if err := repairWalFile(corruptedFile, cs.config.WalFile()); err != nil {
-	// 			cs.logger.Error("the WAL repair failed", "err", err)
+	// 			log.Error("the WAL repair failed", "err", err)
 	// 			return err
 	// 		}
 
-	// 		cs.logger.Info("successful WAL repair")
+	// 		log.Info("successful WAL repair")
 
 	// 		// reload WAL file
 	// 		if err := cs.loadWalFile(ctx); err != nil {
@@ -597,7 +595,7 @@ func (cs *SimpleState) OnStart(ctx context.Context) error {
 func (cs *SimpleState) startRoutines(ctx context.Context, maxSteps int) {
 	err := cs.timeoutTicker.Start(ctx)
 	if err != nil {
-		cs.logger.Error("failed to start timeout ticker", "err", err)
+		log.Error("failed to start timeout ticker", "err", err)
 		return
 	}
 
@@ -608,7 +606,7 @@ func (cs *SimpleState) startRoutines(ctx context.Context, maxSteps int) {
 // func (cs *SimpleState) loadWalFile(ctx context.Context) error {
 // 	wal, err := cs.OpenWAL(ctx, cs.config.WalFile)
 // 	if err != nil {
-// 		cs.logger.Error("failed to load state WAL", "err", err)
+// 		log.Error("failed to load state WAL", "err", err)
 // 		return err
 // 	}
 
@@ -623,7 +621,7 @@ func (cs *SimpleState) OnStop() {
 		select {
 		case <-cs.onStopCh:
 		case <-time.After(cs.config.TimeoutCommit):
-			cs.logger.Error("OnStop: timeout waiting for commit to finish", "time", cs.config.TimeoutCommit)
+			log.Error("OnStop: timeout waiting for commit to finish", "time", cs.config.TimeoutCommit)
 		}
 	}
 
@@ -632,7 +630,7 @@ func (cs *SimpleState) OnStop() {
 	if cs.timeoutTicker.IsRunning() {
 		if err := cs.timeoutTicker.Stop(); err != nil {
 			// if !errors.Is(err, service.ErrAlreadyStopped) {
-			cs.logger.Error("failed trying to stop timeoutTicket", "error", err)
+			log.Error("failed trying to stop timeoutTicket", "error", err)
 			// }
 		}
 	}
@@ -649,14 +647,14 @@ func (cs *SimpleState) Wait() {
 // OpenWAL opens a file to log all consensus messages and timeouts for
 // deterministic accountability.
 // func (cs *SimpleState) OpenWAL(ctx context.Context, walFile string) (WAL, error) {
-// 	wal, err := NewWAL(cs.logger.With("wal", walFile), walFile)
+// 	wal, err := NewWAL(log.With("wal", walFile), walFile)
 // 	if err != nil {
-// 		cs.logger.Error("failed to open WAL", "file", walFile, "err", err)
+// 		log.Error("failed to open WAL", "file", walFile, "err", err)
 // 		return nil, err
 // 	}
 
 // 	if err := wal.Start(ctx); err != nil {
-// 		cs.logger.Error("failed to start WAL", "err", err)
+// 		log.Error("failed to start WAL", "err", err)
 // 		return nil, err
 // 	}
 
@@ -746,7 +744,7 @@ func (cs *SimpleState) updateRoundStep(round int32, step RoundStepType) {
 
 // enterNewRound(height, 0) at cs.StartTime.
 func (cs *SimpleState) scheduleRound0(rs *RoundState) {
-	// cs.logger.Info("scheduleRound0", "now", tmtime.Now(), "startTime", cs.StartTime)
+	// log.Info("scheduleRound0", "now", tmtime.Now(), "startTime", cs.StartTime)
 	sleepDuration := rs.StartTime.Sub(tmtime.Now())
 	cs.scheduleTimeout(sleepDuration, rs.Height, 0, RoundStepNewHeight)
 }
@@ -767,7 +765,7 @@ func (cs *SimpleState) sendInternalMessage(ctx context.Context, mi MsgInfo) {
 		// be processed out of order.
 		// TODO: use CList here for strict determinism and
 		// attempt push to internalMsgQueue in receiveRoutine
-		cs.logger.Debug("internal msg queue is full; using a go-routine")
+		log.Debug("internal msg queue is full; using a go-routine")
 		go func() {
 			select {
 			case <-ctx.Done():
@@ -834,7 +832,7 @@ func (cs *SimpleState) updateToState(ctx context.Context, state ChainState) {
 		// signal the new round step, because other services (eg. txNotifier)
 		// depend on having an up-to-date peer state!
 		if state.LastBlockHeight <= cs.state.LastBlockHeight {
-			cs.logger.Debug(
+			log.Debug(
 				"ignoring updateToState()",
 				"new_height", state.LastBlockHeight+1,
 				"old_height", cs.state.LastBlockHeight+1,
@@ -913,7 +911,7 @@ func (cs *SimpleState) updateToState(ctx context.Context, state ChainState) {
 func (cs *SimpleState) newStep(ctx context.Context) {
 	// rs := cs.RoundStateEvent()
 	// if err := cs.wal.Write(rs); err != nil {
-	// 	cs.logger.Error("failed writing to WAL", "err", err)
+	// 	log.Error("failed writing to WAL", "err", err)
 	// }
 
 	cs.nSteps++
@@ -936,7 +934,7 @@ func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
 		// close wal now that we're done writing to it
 		// if err := cs.wal.Stop(); err != nil {
 		// 	// if !errors.Is(err, service.ErrAlreadyStopped) {
-		// 	cs.logger.Error("failed trying to stop WAL", "error", err)
+		// 	log.Error("failed trying to stop WAL", "error", err)
 		// 	// }
 		// }
 
@@ -946,7 +944,7 @@ func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			cs.logger.Error("CONSENSUS FAILURE!!!", "err", r, "stack", string(debug.Stack()))
+			log.Error("CONSENSUS FAILURE!!!", "err", r, "stack", string(debug.Stack()))
 			// stop gracefully
 			//
 			// NOTE: We most probably shouldn't be running any further when there is
@@ -962,7 +960,7 @@ func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
 	for {
 		if maxSteps > 0 {
 			if cs.nSteps >= maxSteps {
-				cs.logger.Debug("reached max steps; exiting receive routine")
+				log.Debug("reached max steps; exiting receive routine")
 				cs.nSteps = 0
 				return
 			}
@@ -975,7 +973,7 @@ func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
 
 		case mi = <-cs.peerMsgQueue:
 			// if err := cs.wal.Write(mi); err != nil {
-			// 	cs.logger.Error("failed writing to WAL", "err", err)
+			// 	log.Error("failed writing to WAL", "err", err)
 			// }
 
 			// handles proposals, block parts, votes
@@ -1004,7 +1002,7 @@ func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
 
 		case ti := <-cs.timeoutTicker.Chan(): // tockChan:
 			// if err := cs.wal.Write(ti); err != nil {
-			// 	cs.logger.Error("failed writing to WAL", "err", err)
+			// 	log.Error("failed writing to WAL", "err", err)
 			// }
 
 			// if the timeout is relevant to the rs
@@ -1068,12 +1066,12 @@ func (cs *SimpleState) handleMsg(ctx context.Context, mi MsgInfo) {
 		// We could make note of this and help filter in broadcastHasVoteMessage().
 
 	default:
-		cs.logger.Error("unknown msg type", "type", fmt.Sprintf("%T", msg))
+		log.Error("unknown msg type", "type", fmt.Sprintf("%T", msg))
 		return
 	}
 
 	if err != nil {
-		cs.logger.Error(
+		log.Error(
 			"failed to process message",
 			"height", cs.Height,
 			"round", cs.Round,
@@ -1089,11 +1087,11 @@ func (cs *SimpleState) handleTimeout(
 	ti timeoutInfo,
 	rs RoundState,
 ) {
-	cs.logger.Debug("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
+	log.Debug("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
 
 	// timeouts must be for current height, round, step
 	if ti.Height != rs.Height || ti.Round < rs.Round || (ti.Round == rs.Round && RoundStepType(ti.Step) < rs.Step) {
-		cs.logger.Debug("ignoring tock because we are ahead", "height", rs.Height, "round", rs.Round, "step", rs.Step)
+		log.Debug("ignoring tock because we are ahead", "height", rs.Height, "round", rs.Round, "step", rs.Step)
 		return
 	}
 
@@ -1274,7 +1272,7 @@ func (cs *SimpleState) defaultDecideProposal(height int64, round int32) {
 	// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
 	// and the privValidator will refuse to sign anything.
 	// if err := cs.wal.FlushAndSync(); err != nil {
-	// 	cs.logger.Error("failed flushing WAL to disk")
+	// 	log.Error("failed flushing WAL to disk")
 	// }
 
 	// Make proposal
@@ -1292,9 +1290,9 @@ func (cs *SimpleState) defaultDecideProposal(height int64, round int32) {
 		// TODO(broadcast proposal)
 		// cs.sendInternalMessage(ctx, msgInfo{&ProposalMessage{proposal}, ""})
 
-		cs.logger.Debug("signed proposal", "height", height, "round", round, "proposal", proposal)
+		log.Debug("signed proposal", "height", height, "round", round, "proposal", proposal)
 	} else if !cs.replayMode {
-		cs.logger.Error("propose step; failed signing proposal", "height", height, "round", round, "err", err)
+		log.Error("propose step; failed signing proposal", "height", height, "round", round, "err", err)
 	}
 }
 
@@ -1338,14 +1336,14 @@ func (cs *SimpleState) createProposalBlock() (block *Block) {
 		commit = cs.LastCommit.MakeCommit()
 
 	default: // This shouldn't happen.
-		cs.logger.Error("propose step; cannot propose anything without commit for the previous block")
+		log.Error("propose step; cannot propose anything without commit for the previous block")
 		return
 	}
 
 	if cs.privValidatorPubKey == nil {
 		// If this node is a validator & proposer in the current round, it will
 		// miss the opportunity to create a block.
-		cs.logger.Error("propose step; empty priv validator public key", "err", errPubKeyIsNotSet)
+		log.Error("propose step; empty priv validator public key", "err", errPubKeyIsNotSet)
 		return
 	}
 
@@ -1788,7 +1786,7 @@ func (cs *SimpleState) defaultSetProposal(proposal *Proposal) error {
 
 	// proposal.Signature = p.Signature
 	cs.Proposal = proposal
-	cs.logger.Info("received proposal", "proposal", proposal)
+	log.Info("received proposal", "proposal", proposal)
 	return nil
 }
 
@@ -1806,7 +1804,7 @@ func (cs *SimpleState) tryAddVote(ctx context.Context, vote *Vote, peerID string
 			}
 
 			if vote.ValidatorAddress == cs.privValidatorPubKey.Address() {
-				cs.logger.Error(
+				log.Error(
 					"found conflicting vote from ourselves; did you unsafe_reset a validator?",
 					"height", vote.Height,
 					"round", vote.Round,
@@ -1818,7 +1816,7 @@ func (cs *SimpleState) tryAddVote(ctx context.Context, vote *Vote, peerID string
 
 			// TODO: report conflicting votes to the evidence pool
 			// cs.evpool.ReportConflictingVotes(voteErr.VoteA, voteErr.VoteB)
-			cs.logger.Debug(
+			log.Debug(
 				"found and sent conflicting votes to the evidence pool",
 				"vote_a", voteErr.VoteA,
 				"vote_b", voteErr.VoteB,
@@ -1826,14 +1824,14 @@ func (cs *SimpleState) tryAddVote(ctx context.Context, vote *Vote, peerID string
 
 			return added, err
 		} else if errors.Is(err, ErrVoteNonDeterministicSignature) {
-			cs.logger.Debug("vote has non-deterministic signature", "err", err)
+			log.Debug("vote has non-deterministic signature", "err", err)
 		} else {
 			// Either
 			// 1) bad peer OR
 			// 2) not a bad peer? this can also err sometimes with "Unexpected step" OR
 			// 3) tmkms use with multiple validators connecting to a single tmkms instance
 			//		(https://github.com/tendermint/tendermint/issues/3839).
-			cs.logger.Info("failed attempting to add vote", "err", err)
+			log.Info("failed attempting to add vote", "err", err)
 			return added, ErrAddingVote
 		}
 	}
@@ -1846,7 +1844,7 @@ func (cs *SimpleState) addVote(
 	vote *Vote,
 	peerID string,
 ) (added bool, err error) {
-	cs.logger.Debug(
+	log.Debug(
 		"adding vote",
 		"vote_height", vote.Height,
 		"vote_type", vote.Type,
@@ -1859,7 +1857,7 @@ func (cs *SimpleState) addVote(
 	if vote.Height+1 == cs.Height && vote.Type == PrecommitType {
 		if cs.Step != RoundStepNewHeight {
 			// Late precommit at prior height is ignored
-			cs.logger.Debug("precommit vote came in after commit timeout and has been ignored", "vote", vote)
+			log.Debug("precommit vote came in after commit timeout and has been ignored", "vote", vote)
 			return
 		}
 
@@ -1881,7 +1879,7 @@ func (cs *SimpleState) addVote(
 	// Height mismatch is ignored.
 	// Not necessarily a bad peer, but not favorable behavior.
 	if vote.Height != cs.Height {
-		cs.logger.Debug("vote ignored and not added", "vote_height", vote.Height, "cs_height", cs.Height, "peer", peerID)
+		log.Debug("vote ignored and not added", "vote_height", vote.Height, "cs_height", cs.Height, "peer", peerID)
 		return
 	}
 
@@ -1895,7 +1893,7 @@ func (cs *SimpleState) addVote(
 	switch vote.Type {
 	case PrevoteType:
 		prevotes := cs.Votes.Prevotes(vote.Round)
-		cs.logger.Debug("added vote to prevote", "vote", vote, "prevotes", prevotes.StringShort())
+		log.Debug("added vote to prevote", "vote", vote, "prevotes", prevotes.StringShort())
 
 		// If +2/3 prevotes for a block or nil for *any* round:
 		if blockID, ok := prevotes.TwoThirdsMajority(); ok {
@@ -1910,7 +1908,7 @@ func (cs *SimpleState) addVote(
 				(vote.Round <= cs.Round) &&
 				cs.LockedBlock.Hash() != blockID {
 
-				cs.logger.Debug("unlocking because of POL", "locked_round", cs.LockedRound, "pol_round", vote.Round)
+				log.Debug("unlocking because of POL", "locked_round", cs.LockedRound, "pol_round", vote.Round)
 
 				cs.LockedRound = -1
 				cs.LockedBlock = nil
@@ -1920,11 +1918,11 @@ func (cs *SimpleState) addVote(
 			// NOTE: our proposal block may be nil or not what received a polka..
 			if (blockID != common.Hash{}) && (cs.ValidRound < vote.Round) && (vote.Round == cs.Round) {
 				if cs.ProposalBlock.Hash() == blockID {
-					cs.logger.Debug("updating valid block because of POL", "valid_round", cs.ValidRound, "pol_round", vote.Round)
+					log.Debug("updating valid block because of POL", "valid_round", cs.ValidRound, "pol_round", vote.Round)
 					cs.ValidRound = vote.Round
 					cs.ValidBlock = cs.ProposalBlock
 				} else {
-					cs.logger.Debug(
+					log.Debug(
 						"valid block we do not know about; set ProposalBlock=nil",
 						"proposal", cs.ProposalBlock.Hash(),
 						"block_id", blockID,
@@ -1959,7 +1957,7 @@ func (cs *SimpleState) addVote(
 
 	case PrecommitType:
 		precommits := cs.Votes.Precommits(vote.Round)
-		cs.logger.Debug("added vote to precommit",
+		log.Debug("added vote to precommit",
 			"height", vote.Height,
 			"round", vote.Round,
 			"validator", vote.ValidatorAddress.String(),
@@ -2078,7 +2076,7 @@ func (cs *SimpleState) signAddVote(ctx context.Context, msgType SignedMsgType, b
 
 	if cs.privValidatorPubKey == nil {
 		// Vote won't be signed, but it's not critical.
-		cs.logger.Error(fmt.Sprintf("signAddVote: %v", errPubKeyIsNotSet))
+		log.Error(fmt.Sprintf("signAddVote: %v", errPubKeyIsNotSet))
 		return nil
 	}
 
@@ -2092,11 +2090,11 @@ func (cs *SimpleState) signAddVote(ctx context.Context, msgType SignedMsgType, b
 	if err == nil {
 		// TODO:
 		cs.sendInternalMessage(ctx, MsgInfo{&VoteMessage{}, ""})
-		cs.logger.Debug("signed and pushed vote", "height", cs.Height, "round", cs.Round, "vote", vote)
+		log.Debug("signed and pushed vote", "height", cs.Height, "round", cs.Round, "vote", vote)
 		return vote
 	}
 
-	cs.logger.Error("failed signing vote", "height", cs.Height, "round", cs.Round, "vote", vote, "err", err)
+	log.Error("failed signing vote", "height", cs.Height, "round", cs.Round, "vote", vote, "err", err)
 	return nil
 }
 
@@ -2146,7 +2144,7 @@ func (cs *SimpleState) checkDoubleSigningRisk(height int64) error {
 			if lastCommit != nil {
 				for sigIdx, s := range lastCommit.Signatures {
 					if s.BlockIDFlag == BlockIDFlagCommit && s.ValidatorAddress == valAddr {
-						cs.logger.Info("found signature from the same key", "sig", s, "idx", sigIdx, "height", height-i)
+						log.Info("found signature from the same key", "sig", s, "idx", sigIdx, "height", height-i)
 						return ErrSignatureFoundInPastBlocks
 					}
 				}
