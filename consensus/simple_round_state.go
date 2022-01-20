@@ -2,21 +2,7 @@ package consensus
 
 import (
 	"time"
-
-	"github.com/ethereum/go-ethereum/common"
 )
-
-type Block struct {
-	LastBlockID     common.Hash
-	Height          uint64
-	TimeMs          uint64
-	ProposerAddress common.Address
-	LastCommit      *Commit
-}
-
-func (b *Block) Hash() common.Hash {
-	return common.Hash{}
-}
 
 // RoundState defines the internal consensus state.
 // NOTE: Not thread safe. Should only be manipulated by functions downstream
