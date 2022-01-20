@@ -10,10 +10,10 @@ import (
 )
 
 type DefaultBlockExecutor struct {
-	db leveldb.DB
+	db *leveldb.DB
 }
 
-func NewDefaultBlockExecutor(db leveldb.DB) consensus.BlockExecutor {
+func NewDefaultBlockExecutor(db *leveldb.DB) consensus.BlockExecutor {
 	return &DefaultBlockExecutor{}
 }
 
