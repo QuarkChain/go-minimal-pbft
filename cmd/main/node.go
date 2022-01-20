@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/go-minimal-pbft/consensus"
 	"github.com/go-minimal-pbft/p2p"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/mattn/go-colorable"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	p2pcrypto "github.com/libp2p/go-libp2p-core/crypto"
@@ -21,6 +24,7 @@ var (
 	p2pBootstrap *string
 	nodeKeyPath  *string
 	nodeName     *string
+	verbosity    *int
 )
 
 var NodeCmd = &cobra.Command{
@@ -37,6 +41,27 @@ func init() {
 	nodeName = NodeCmd.Flags().String("nodeName", "", "Node name to announce in gossip heartbeats")
 
 	nodeKeyPath = NodeCmd.Flags().String("nodeKey", "", "Path to node key (will be generated if it doesn't exist)")
+
+	verbosity = NodeCmd.Flags().Int("verbosity", 3, "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail")
+
+	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
+	glogger.Verbosity(log.LvlInfo)
+	log.Root().SetHandler(glogger)
+
+	// setup logger
+	var ostream log.Handler
+	output := io.Writer(os.Stderr)
+
+	usecolor := (isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb"
+	if usecolor {
+		output = colorable.NewColorableStderr()
+	}
+	ostream = log.StreamHandler(output, log.TerminalFormat(usecolor))
+
+	glogger.SetHandler(ostream)
+
+	// logging
+	glogger.Verbosity(log.Lvl(*verbosity))
 }
 
 func runNode(cmd *cobra.Command, args []string) {
@@ -61,11 +86,9 @@ func runNode(cmd *cobra.Command, args []string) {
 	go p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
 
 	// Running the node
+	log.Info("Running the node")
 
-	select {
-	case <-rootCtx.Done():
-		return
-	}
+	<-rootCtx.Done()
 }
 
 func getOrCreateNodeKey(path string) (p2pcrypto.PrivKey, error) {

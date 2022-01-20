@@ -144,6 +144,8 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.5.0
 	github.com/libp2p/go-libp2p-quic-transport v0.11.2
 	github.com/libp2p/go-libp2p-tls v0.1.3
+	github.com/mattn/go-colorable v0.1.12
+	github.com/mattn/go-isatty v0.0.14
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/multiformats/go-multiaddr v0.3.3
 	github.com/prometheus/client_golang v1.11.0
