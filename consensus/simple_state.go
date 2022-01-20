@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/ethereum/go-ethereum/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 )
 
@@ -384,7 +384,7 @@ func NewSimpleState(
 		blockStore:       blockStore,
 		peerMsgQueue:     make(chan MsgInfo, msgQueueSize),
 		internalMsgQueue: make(chan MsgInfo, msgQueueSize),
-		timeoutTicker:    NewTimeoutTicker(logger),
+		timeoutTicker:    NewTimeoutTicker(),
 		statsMsgQueue:    make(chan MsgInfo, msgQueueSize),
 		done:             make(chan struct{}),
 		doWALCatchup:     true,
@@ -471,7 +471,7 @@ func (cs *SimpleState) SetPrivValidator(priv PrivValidator) {
 	}
 
 	if err := cs.updatePrivValidatorPubKey(); err != nil {
-		cs.logger.Error("failed to get private validator pubkey", "err", err)
+		log.Error("failed to get private validator pubkey", "err", err)
 	}
 }
 
@@ -1137,21 +1137,20 @@ func (cs *SimpleState) handleTimeout(
 // Enter: +2/3 prevotes any or +2/3 precommits for block or any from (height, round)
 // NOTE: cs.StartTime was already set for height.
 func (cs *SimpleState) enterNewRound(ctx context.Context, height int64, round int32) {
-	logger := cs.logger.With("height", height, "round", round)
-
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cs.Step != RoundStepNewHeight) {
-		logger.Debug(
+		log.Debug(
 			"entering new round with invalid args",
+			"height", height, "round", round,
 			"current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step),
 		)
 		return
 	}
 
 	if now := tmtime.Now(); cs.StartTime.After(now) {
-		logger.Debug("need to set a buffer and log message here for sanity", "start_time", cs.StartTime, "now", now)
+		log.Debug("need to set a buffer and log message here for sanity", "start_time", "height", height, "round", round, cs.StartTime, "now", now)
 	}
 
-	logger.Debug("entering new round", "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
+	log.Debug("entering new round", "height", height, "round", round, "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
 
 	// increment validators if necessary
 	validators := cs.Validators
@@ -1170,7 +1169,7 @@ func (cs *SimpleState) enterNewRound(ctx context.Context, height int64, round in
 		// and meanwhile we might have received a proposal
 		// for round 0.
 	} else {
-		logger.Debug("resetting proposal info")
+		log.Debug("resetting proposal info", "height", height, "round", round)
 		cs.Proposal = nil
 		cs.ProposalBlock = nil
 	}
@@ -1186,17 +1185,16 @@ func (cs *SimpleState) enterNewRound(ctx context.Context, height int64, round in
 //		after enterNewRound(height,round), after timeout of CreateEmptyBlocksInterval
 // Enter (!CreateEmptyBlocks) : after enterNewRound(height,round), once txs are in the mempool
 func (cs *SimpleState) enterPropose(ctx context.Context, height int64, round int32) {
-	logger := cs.logger.With("height", height, "round", round)
-
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPropose <= cs.Step) {
-		logger.Debug(
+		log.Debug(
 			"entering propose step with invalid args",
+			"height", height, "round", round,
 			"current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step),
 		)
 		return
 	}
 
-	logger.Debug("entering propose step", "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
+	log.Debug("entering propose step", "height", height, "round", round, "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
 
 	defer func() {
 		// Done enterPropose:
@@ -1216,16 +1214,16 @@ func (cs *SimpleState) enterPropose(ctx context.Context, height int64, round int
 
 	// Nothing more to do if we're not a validator
 	if cs.privValidator == nil {
-		logger.Debug("node is not a validator")
+		log.Debug("node is not a validator", "height", height, "round", round)
 		return
 	}
 
-	logger.Debug("node is a validator")
+	log.Debug("node is a validator", "height", height, "round", round)
 
 	if cs.privValidatorPubKey == nil {
 		// If this node is a validator & proposer in the current round, it will
 		// miss the opportunity to create a block.
-		logger.Error("propose step; empty priv validator public key", "err", errPubKeyIsNotSet)
+		log.Error("propose step; empty priv validator public key", "err", errPubKeyIsNotSet, "height", height, "round", round)
 		return
 	}
 
@@ -1233,20 +1231,22 @@ func (cs *SimpleState) enterPropose(ctx context.Context, height int64, round int
 
 	// if not a validator, we're done
 	if !cs.Validators.HasAddress(address) {
-		logger.Debug("node is not a validator", "addr", address, "vals", cs.Validators)
+		log.Debug("node is not a validator", "height", height, "round", round, "addr", address, "vals", cs.Validators)
 		return
 	}
 
 	if cs.isProposer(address) {
-		logger.Debug(
+		log.Debug(
 			"propose step; our turn to propose",
+			"height", height, "round", round,
 			"proposer", address,
 		)
 
 		cs.decideProposal(height, round)
 	} else {
-		logger.Debug(
+		log.Debug(
 			"propose step; not our turn to propose",
+			"height", height, "round", round,
 			"proposer", cs.Validators.GetProposer().Address,
 		)
 	}
@@ -1359,11 +1359,10 @@ func (cs *SimpleState) createProposalBlock() (block *Block) {
 // Prevote for LockedBlock if we're locked, or ProposalBlock if valid.
 // Otherwise vote nil.
 func (cs *SimpleState) enterPrevote(ctx context.Context, height int64, round int32) {
-	logger := cs.logger.With("height", height, "round", round)
-
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrevote <= cs.Step) {
-		logger.Debug(
+		log.Debug(
 			"entering prevote step with invalid args",
+			"height", height, "round", round,
 			"current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step),
 		)
 		return
@@ -1375,7 +1374,7 @@ func (cs *SimpleState) enterPrevote(ctx context.Context, height int64, round int
 		cs.newStep(ctx)
 	}()
 
-	logger.Debug("entering prevote step", "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
+	log.Debug("entering prevote step", "height", height, "round", round, "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
 
 	// Sign and broadcast vote as necessary
 	cs.doPrevote(ctx, height, round)
@@ -1385,18 +1384,16 @@ func (cs *SimpleState) enterPrevote(ctx context.Context, height int64, round int
 }
 
 func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height int64, round int32) {
-	logger := cs.logger.With("height", height, "round", round)
-
 	// If a block is locked, prevote that.
 	if cs.LockedBlock != nil {
-		logger.Debug("prevote step; already locked on a block; prevoting locked block")
+		log.Debug("prevote step; already locked on a block; prevoting locked block", "height", height, "round", round)
 		cs.signAddVote(ctx, PrevoteType, cs.LockedBlock.Hash())
 		return
 	}
 
 	// If ProposalBlock is nil, prevote nil.
 	if cs.ProposalBlock == nil {
-		logger.Debug("prevote step: ProposalBlock is nil")
+		log.Debug("prevote step: ProposalBlock is nil", "height", height, "round", round)
 		cs.signAddVote(ctx, PrevoteType, common.Hash{})
 		return
 	}
@@ -1406,7 +1403,7 @@ func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height int64, round
 	err := cs.blockExec.ValidateBlock(cs.ProposalBlock)
 	if err != nil {
 		// ProposalBlock is invalid, prevote nil.
-		logger.Error("prevote step: ProposalBlock is invalid", "err", err)
+		log.Error("prevote step: ProposalBlock is invalid", "height", height, "round", round, "err", err)
 		cs.signAddVote(ctx, PrevoteType, common.Hash{})
 		return
 	}
@@ -1414,17 +1411,16 @@ func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height int64, round
 	// Prevote cs.ProposalBlock
 	// NOTE: the proposal signature is validated when it is received,
 	// and the proposal block parts are validated as they are received (against the merkle hash in the proposal)
-	logger.Debug("prevote step: ProposalBlock is valid")
+	log.Debug("prevote step: ProposalBlock is valid", "height", height, "round", round)
 	cs.signAddVote(ctx, PrevoteType, cs.ProposalBlock.Hash())
 }
 
 // Enter: any +2/3 prevotes at next round.
 func (cs *SimpleState) enterPrevoteWait(ctx context.Context, height int64, round int32) {
-	logger := cs.logger.With("height", height, "round", round)
-
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrevoteWait <= cs.Step) {
-		logger.Debug(
+		log.Debug(
 			"entering prevote wait step with invalid args",
+			"height", height, "round", round,
 			"current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step),
 		)
 		return
@@ -1437,7 +1433,7 @@ func (cs *SimpleState) enterPrevoteWait(ctx context.Context, height int64, round
 		))
 	}
 
-	logger.Debug("entering prevote wait step", "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
+	log.Debug("entering prevote wait step", "height", height, "round", round, "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
 
 	defer func() {
 		// Done enterPrevoteWait:
@@ -1456,17 +1452,16 @@ func (cs *SimpleState) enterPrevoteWait(ctx context.Context, height int64, round
 // else, unlock an existing lock and precommit nil if +2/3 of prevotes were nil,
 // else, precommit nil otherwise.
 func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round int32) {
-	logger := cs.logger.With("height", height, "round", round)
-
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrecommit <= cs.Step) {
-		logger.Debug(
+		log.Debug(
 			"entering precommit step with invalid args",
+			"height", height, "round", round,
 			"current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step),
 		)
 		return
 	}
 
-	logger.Debug("entering precommit step", "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
+	log.Debug("entering precommit step", "height", height, "round", round, "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
 
 	defer func() {
 		// Done enterPrecommit:
@@ -1480,9 +1475,9 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round i
 	// If we don't have a polka, we must precommit nil.
 	if !ok {
 		if cs.LockedBlock != nil {
-			logger.Debug("precommit step; no +2/3 prevotes during enterPrecommit while we are locked; precommitting nil")
+			log.Debug("precommit step; no +2/3 prevotes during enterPrecommit while we are locked; precommitting nil", "height", height, "round", round)
 		} else {
-			logger.Debug("precommit step; no +2/3 prevotes during enterPrecommit; precommitting nil")
+			log.Debug("precommit step; no +2/3 prevotes during enterPrecommit; precommitting nil", "height", height, "round", round)
 		}
 
 		cs.signAddVote(ctx, PrecommitType, common.Hash{})
@@ -1498,9 +1493,9 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round i
 	// +2/3 prevoted nil. Unlock and precommit nil.
 	if (blockID == common.Hash{}) {
 		if cs.LockedBlock == nil {
-			logger.Debug("precommit step; +2/3 prevoted for nil")
+			log.Debug("precommit step; +2/3 prevoted for nil", "height", height, "round", round)
 		} else {
-			logger.Debug("precommit step; +2/3 prevoted for nil; unlocking")
+			log.Debug("precommit step; +2/3 prevoted for nil; unlocking", "height", height, "round", round)
 			cs.LockedRound = -1
 			cs.LockedBlock = nil
 		}
@@ -1513,7 +1508,7 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round i
 
 	// If we're already locked on that block, precommit it, and update the LockedRound
 	if cs.LockedBlock.Hash() == blockID {
-		logger.Debug("precommit step; +2/3 prevoted locked block; relocking")
+		log.Debug("precommit step; +2/3 prevoted locked block; relocking", "height", height, "round", round)
 		cs.LockedRound = round
 
 		cs.signAddVote(ctx, PrecommitType, blockID)
@@ -1522,7 +1517,7 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round i
 
 	// If +2/3 prevoted for proposal block, stage and precommit it
 	if cs.ProposalBlock.Hash() == blockID {
-		logger.Debug("precommit step; +2/3 prevoted proposal block; locking", "hash", blockID)
+		log.Debug("precommit step; +2/3 prevoted proposal block; locking", "height", height, "round", round, "hash", blockID)
 
 		// Validate the block.
 		if err := cs.blockExec.ValidateBlock(cs.ProposalBlock); err != nil {
@@ -1539,7 +1534,7 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round i
 	// There was a polka in this round for a block we don't have.
 	// Fetch that block, unlock, and precommit nil.
 	// The +2/3 prevotes for this round is the POL for our unlock.
-	logger.Debug("precommit step; +2/3 prevotes for a block we do not have; voting nil", "block_id", blockID)
+	log.Debug("precommit step; +2/3 prevotes for a block we do not have; voting nil", "height", height, "round", round, "block_id", blockID)
 
 	cs.LockedRound = -1
 	cs.LockedBlock = nil
@@ -1549,11 +1544,10 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round i
 
 // Enter: any +2/3 precommits for next round.
 func (cs *SimpleState) enterPrecommitWait(ctx context.Context, height int64, round int32) {
-	logger := cs.logger.With("height", height, "round", round)
-
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cs.TriggeredTimeoutPrecommit) {
-		logger.Debug(
+		log.Debug(
 			"entering precommit wait step with invalid args",
+			"height", height, "round", round,
 			"triggered_timeout", cs.TriggeredTimeoutPrecommit,
 			"current", fmt.Sprintf("%v/%v", cs.Height, cs.Round),
 		)
@@ -1567,7 +1561,7 @@ func (cs *SimpleState) enterPrecommitWait(ctx context.Context, height int64, rou
 		))
 	}
 
-	logger.Debug("entering precommit wait step", "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
+	log.Debug("entering precommit wait step", "height", height, "round", round, "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
 
 	defer func() {
 		// Done enterPrecommitWait:
@@ -1581,17 +1575,16 @@ func (cs *SimpleState) enterPrecommitWait(ctx context.Context, height int64, rou
 
 // Enter: +2/3 precommits for block
 func (cs *SimpleState) enterCommit(ctx context.Context, height int64, commitRound int32) {
-	logger := cs.logger.With("height", height, "commit_round", commitRound)
-
 	if cs.Height != height || RoundStepCommit <= cs.Step {
-		logger.Debug(
+		log.Debug(
 			"entering commit step with invalid args",
+			"height", height, "commit_round", commitRound,
 			"current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step),
 		)
 		return
 	}
 
-	logger.Debug("entering commit step", "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
+	log.Debug("entering commit step", "height", height, "commit_round", commitRound, "current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step))
 
 	defer func() {
 		// Done enterCommit:
@@ -1614,14 +1607,15 @@ func (cs *SimpleState) enterCommit(ctx context.Context, height int64, commitRoun
 	// Move them over to ProposalBlock if they match the commit hash,
 	// otherwise they'll be cleared in updateToState.
 	if cs.LockedBlock.Hash() == blockID {
-		logger.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID)
+		log.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "height", height, "commit_round", commitRound, "current", "block_hash", blockID)
 		cs.ProposalBlock = cs.LockedBlock
 	}
 
 	// If we don't have the block being committed, set up to get it.
 	if cs.ProposalBlock.Hash() != blockID {
-		logger.Info(
+		log.Info(
 			"commit is for a block we do not know about; set ProposalBlock=nil",
+			"height", height, "commit_round", commitRound, "current",
 			"proposal", cs.ProposalBlock.Hash(),
 			"commit", blockID[:],
 		)
@@ -1634,23 +1628,22 @@ func (cs *SimpleState) enterCommit(ctx context.Context, height int64, commitRoun
 
 // If we have the block AND +2/3 commits for it, finalize.
 func (cs *SimpleState) tryFinalizeCommit(ctx context.Context, height int64) {
-	logger := cs.logger.With("height", height)
-
 	if cs.Height != height {
 		panic(fmt.Sprintf("tryFinalizeCommit() cs.Height: %v vs height: %v", cs.Height, height))
 	}
 
 	blockID, ok := cs.Votes.Precommits(cs.CommitRound).TwoThirdsMajority()
 	if (!ok || blockID == common.Hash{}) {
-		logger.Error("failed attempt to finalize commit; there was no +2/3 majority or +2/3 was for nil")
+		log.Error("failed attempt to finalize commit; there was no +2/3 majority or +2/3 was for nil", "height", height)
 		return
 	}
 
 	if cs.ProposalBlock.Hash() != blockID {
 		// TODO: this happens every time if we're not a validator (ugly logs)
 		// TODO: ^^ wait, why does it matter that we're a validator?
-		logger.Debug(
+		log.Debug(
 			"failed attempt to finalize commit; we do not have the commit block",
+			"height", height,
 			"proposal_block", cs.ProposalBlock.Hash(),
 			"commit_block", blockID,
 		)
@@ -1662,11 +1655,10 @@ func (cs *SimpleState) tryFinalizeCommit(ctx context.Context, height int64) {
 
 // Increment height and goto RoundStepNewHeight
 func (cs *SimpleState) finalizeCommit(ctx context.Context, height int64) {
-	logger := cs.logger.With("height", height)
-
 	if cs.Height != height || cs.Step != RoundStepCommit {
-		logger.Debug(
+		log.Debug(
 			"entering finalize commit step",
+			"height", height,
 			"current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step),
 		)
 		return
@@ -1686,13 +1678,15 @@ func (cs *SimpleState) finalizeCommit(ctx context.Context, height int64) {
 		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
 	}
 
-	logger.Info(
+	log.Info(
 		"finalizing commit of block",
+		"height", height,
 		"hash", block.Hash(),
 		// "root", block.AppHash,
 		// "num_txs", len(block.Txs),
 	)
-	logger.Debug(fmt.Sprintf("%v", block))
+
+	log.Debug(fmt.Sprintf("%v", block), "height", height)
 
 	// fail.Fail() // XXX
 
@@ -1705,7 +1699,7 @@ func (cs *SimpleState) finalizeCommit(ctx context.Context, height int64) {
 		cs.blockStore.SaveBlock(block, seenCommit)
 	} else {
 		// Happens during replay if we already saved the block but didn't commit
-		logger.Debug("calling finalizeCommit on already stored block", "height", block.Height)
+		log.Debug("calling finalizeCommit on already stored block", "height", block.Height)
 	}
 
 	// fail.Fail() // XXX
@@ -1740,7 +1734,7 @@ func (cs *SimpleState) finalizeCommit(ctx context.Context, height int64) {
 	// NOTE The block.AppHash wont reflect these txs until the next block.
 	stateCopy, err := cs.blockExec.ApplyBlock(ctx, stateCopy, block)
 	if err != nil {
-		logger.Error("failed to apply block", "err", err)
+		log.Error("failed to apply block", "height", height, "err", err)
 		return
 	}
 
@@ -1753,7 +1747,7 @@ func (cs *SimpleState) finalizeCommit(ctx context.Context, height int64) {
 
 	// Private validator might have changed it's key pair => refetch pubkey.
 	if err := cs.updatePrivValidatorPubKey(); err != nil {
-		logger.Error("failed to get private validator pubkey", "err", err)
+		log.Error("failed to get private validator pubkey", "height", height, "err", err)
 	}
 
 	// cs.StartTime is already set.

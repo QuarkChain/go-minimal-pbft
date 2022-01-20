@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 var (
@@ -92,7 +92,6 @@ Typical usage:
 	}
 */
 type BaseService struct {
-	logger  log.Logger
 	name    string
 	started uint32 // atomic
 	stopped uint32 // atomic
@@ -103,12 +102,11 @@ type BaseService struct {
 }
 
 // NewBaseService creates a new BaseService.
-func NewBaseService(logger log.Logger, name string, impl Implementation) *BaseService {
+func NewBaseService(name string, impl Implementation) *BaseService {
 	return &BaseService{
-		logger: logger,
-		name:   name,
-		quit:   make(chan struct{}),
-		impl:   impl,
+		name: name,
+		quit: make(chan struct{}),
+		impl: impl,
 	}
 }
 
@@ -118,12 +116,12 @@ func NewBaseService(logger log.Logger, name string, impl Implementation) *BaseSe
 func (bs *BaseService) Start(ctx context.Context) error {
 	if atomic.CompareAndSwapUint32(&bs.started, 0, 1) {
 		if atomic.LoadUint32(&bs.stopped) == 1 {
-			bs.logger.Error("not starting service; already stopped", "service", bs.name, "impl", bs.impl.String())
+			log.Error("not starting service; already stopped", "service", bs.name, "impl", bs.impl.String())
 			atomic.StoreUint32(&bs.started, 0)
 			return ErrAlreadyStopped
 		}
 
-		bs.logger.Info("starting service", "service", bs.name, "impl", bs.impl.String())
+		log.Info("starting service", "service", bs.name, "impl", bs.impl.String())
 
 		if err := bs.impl.OnStart(ctx); err != nil {
 			// revert flag
@@ -147,13 +145,13 @@ func (bs *BaseService) Start(ctx context.Context) error {
 				// the context was cancel and we
 				// should stop.
 				if err := bs.Stop(); err != nil {
-					bs.logger.Error("stopped service",
+					log.Error("stopped service",
 						"err", err.Error(),
 						"service", bs.name,
 						"impl", bs.impl.String())
 				}
 
-				bs.logger.Info("stopped service",
+				log.Info("stopped service",
 					"service", bs.name,
 					"impl", bs.impl.String())
 			}
@@ -162,7 +160,7 @@ func (bs *BaseService) Start(ctx context.Context) error {
 		return nil
 	}
 
-	bs.logger.Debug("not starting service; already started", "service", bs.name, "impl", bs.impl.String())
+	log.Debug("not starting service; already started", "service", bs.name, "impl", bs.impl.String())
 	return ErrAlreadyStarted
 }
 
@@ -171,19 +169,19 @@ func (bs *BaseService) Start(ctx context.Context) error {
 func (bs *BaseService) Stop() error {
 	if atomic.CompareAndSwapUint32(&bs.stopped, 0, 1) {
 		if atomic.LoadUint32(&bs.started) == 0 {
-			bs.logger.Error("not stopping service; not started yet", "service", bs.name, "impl", bs.impl.String())
+			log.Error("not stopping service; not started yet", "service", bs.name, "impl", bs.impl.String())
 			atomic.StoreUint32(&bs.stopped, 0)
 			return ErrNotStarted
 		}
 
-		bs.logger.Info("stopping service", "service", bs.name, "impl", bs.impl.String())
+		log.Info("stopping service", "service", bs.name, "impl", bs.impl.String())
 		bs.impl.OnStop()
 		close(bs.quit)
 
 		return nil
 	}
 
-	bs.logger.Debug("not stopping service; already stopped", "service", bs.name, "impl", bs.impl.String())
+	log.Debug("not stopping service; already stopped", "service", bs.name, "impl", bs.impl.String())
 	return ErrAlreadyStopped
 }
 

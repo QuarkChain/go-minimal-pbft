@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 var (
@@ -37,7 +37,6 @@ type TimeoutTicker interface {
 // and fired on the tockChan.
 type timeoutTicker struct {
 	BaseService
-	logger log.Logger
 
 	timer    *time.Timer
 	tickChan chan timeoutInfo // for scheduling timeouts
@@ -45,14 +44,13 @@ type timeoutTicker struct {
 }
 
 // NewTimeoutTicker returns a new TimeoutTicker.
-func NewTimeoutTicker(logger log.Logger) TimeoutTicker {
+func NewTimeoutTicker() TimeoutTicker {
 	tt := &timeoutTicker{
-		logger:   logger,
 		timer:    time.NewTimer(0),
 		tickChan: make(chan timeoutInfo, tickTockBufferSize),
 		tockChan: make(chan timeoutInfo, tickTockBufferSize),
 	}
-	tt.BaseService = *NewBaseService(logger, "TimeoutTicker", tt)
+	tt.BaseService = *NewBaseService("TimeoutTicker", tt)
 	tt.stopTimer() // don't want to fire until the first scheduled timeout
 	return tt
 }
@@ -88,7 +86,7 @@ func (t *timeoutTicker) stopTimer() {
 		select {
 		case <-t.timer.C:
 		default:
-			t.logger.Debug("Timer already stopped")
+			log.Debug("Timer already stopped")
 		}
 	}
 }
@@ -97,12 +95,12 @@ func (t *timeoutTicker) stopTimer() {
 // timers are interupted and replaced by new ticks from later steps
 // timeouts of 0 on the tickChan will be immediately relayed to the tockChan
 func (t *timeoutTicker) timeoutRoutine(ctx context.Context) {
-	t.logger.Debug("Starting timeout routine")
+	log.Debug("Starting timeout routine")
 	var ti timeoutInfo
 	for {
 		select {
 		case newti := <-t.tickChan:
-			t.logger.Debug("Received tick", "old_ti", ti, "new_ti", newti)
+			log.Debug("Received tick", "old_ti", ti, "new_ti", newti)
 
 			// ignore tickers for old height/round/step
 			if newti.Height < ti.Height {
@@ -124,9 +122,9 @@ func (t *timeoutTicker) timeoutRoutine(ctx context.Context) {
 			// NOTE time.Timer allows duration to be non-positive
 			ti = newti
 			t.timer.Reset(ti.Duration)
-			t.logger.Debug("Scheduled timeout", "dur", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
+			log.Debug("Scheduled timeout", "dur", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
 		case <-t.timer.C:
-			t.logger.Info("Timed out", "dur", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
+			log.Info("Timed out", "dur", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
 			// go routine here guarantees timeoutRoutine doesn't block.
 			// Determinism comes from playback in the receiveRoutine.
 			// We can eliminate it by merging the timeoutRoutine into receiveRoutine

@@ -9,7 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/go-minimal-pbft/consensus"
 	"github.com/go-minimal-pbft/p2p"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/spf13/cobra"
 
@@ -31,7 +30,7 @@ var NodeCmd = &cobra.Command{
 }
 
 func init() {
-	p2pNetworkID = NodeCmd.Flags().String("network", "/unibridge/dev", "P2P network identifier")
+	p2pNetworkID = NodeCmd.Flags().String("network", "/mpbft/dev", "P2P network identifier")
 	p2pPort = NodeCmd.Flags().Uint("port", 8999, "P2P UDP listener port")
 	p2pBootstrap = NodeCmd.Flags().String("bootstrap", "", "P2P bootstrap peers (comma-separated)")
 
@@ -42,7 +41,7 @@ func init() {
 
 func runNode(cmd *cobra.Command, args []string) {
 	// Node's main lifecycle context.
-	_, rootCtxCancel := context.WithCancel(context.Background())
+	rootCtx, rootCtxCancel := context.WithCancel(context.Background())
 	defer rootCtxCancel()
 
 	// Outbound gossip message queue
@@ -52,15 +51,21 @@ func runNode(cmd *cobra.Command, args []string) {
 	obsvC := make(chan *consensus.MsgInfo, 50)
 
 	// Load p2p private key
-	var priv crypto.PrivKey
+	var priv p2pcrypto.PrivKey
 	priv, err := getOrCreateNodeKey(*nodeKeyPath)
 	if err != nil {
 		log.Error("Failed to load node key", "err", err)
 		return
 	}
 
-	p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
+	go p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
 
+	// Running the node
+
+	select {
+	case <-rootCtx.Done():
+		return
+	}
 }
 
 func getOrCreateNodeKey(path string) (p2pcrypto.PrivKey, error) {
