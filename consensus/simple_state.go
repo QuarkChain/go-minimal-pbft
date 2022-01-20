@@ -200,7 +200,7 @@ func (commit *Commit) GetVote(valIdx int32) *Vote {
 		Height:           commit.Height,
 		Round:            commit.Round,
 		BlockID:          commitSig.BlockID(commit.BlockID),
-		Timestamp:        commitSig.Timestamp,
+		TimestampMs:      commitSig.TimestampMs,
 		ValidatorAddress: commitSig.ValidatorAddress,
 		ValidatorIndex:   valIdx,
 		Signature:        commitSig.Signature,
@@ -223,7 +223,7 @@ const (
 type CommitSig struct {
 	BlockIDFlag      BlockIDFlag    `json:"block_id_flag"`
 	ValidatorAddress common.Address `json:"validator_address"`
-	Timestamp        int64          `json:"timestamp"` // epoch
+	TimestampMs      uint64         `json:"timestamp"` // epoch
 	Signature        []byte         `json:"signature"`
 }
 
@@ -264,7 +264,7 @@ type ChainState struct {
 	// LastBlockHeight=0 at genesis (ie. block(H=0) does not exist)
 	LastBlockHeight uint64
 	LastBlockID     common.Hash
-	LastBlockTime   int64
+	LastBlockTime   uint64
 
 	// LastValidators is used to validate block.LastCommit.
 	// Validators are persisted to the database separately every time they change,
@@ -1960,7 +1960,7 @@ func (cs *SimpleState) addVote(
 			"height", vote.Height,
 			"round", vote.Round,
 			"validator", vote.ValidatorAddress.String(),
-			"vote_timestamp", vote.Timestamp,
+			"vote_timestamp", vote.TimestampMs,
 			"data", precommits.LogString())
 
 		blockID, ok := precommits.TwoThirdsMajority()
@@ -2012,7 +2012,7 @@ func (cs *SimpleState) signVote(
 		ValidatorIndex:   valIdx,
 		Height:           cs.Height,
 		Round:            cs.Round,
-		Timestamp:        cs.voteTime(),
+		TimestampMs:      cs.voteTime(),
 		Type:             msgType,
 		BlockID:          blockID,
 	}
@@ -2047,11 +2047,11 @@ func (cs *SimpleState) signVote(
 // It ensures that for a prior block with a BFT-timestamp of T,
 // any vote from this validator will have time at least time T + 1ms.
 // This is needed, as monotonicity of time is a guarantee that BFT time provides.
-func (cs *SimpleState) voteTime() int64 {
-	now := tmtime.Now().UnixMilli()
+func (cs *SimpleState) voteTime() uint64 {
+	now := uint64(tmtime.Now().UnixMilli())
 	minVoteTime := now
 	// Minimum time increment between blocks
-	timeIota := int64(1) // in milli
+	timeIota := uint64(1) // in milli
 	// TODO: We should remove next line in case we don't vote for v in case cs.ProposalBlock == nil,
 	// even if cs.LockedBlock != nil. See https://docs.tendermint.com/master/spec/.
 	if cs.LockedBlock != nil {

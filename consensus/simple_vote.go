@@ -23,7 +23,7 @@ type Vote struct {
 	Height           uint64         `json:"height"`
 	Round            int32          `json:"round"`    // assume there will not be greater than 2_147_483_647 rounds
 	BlockID          common.Hash    `json:"block_id"` // zero if vote is nil.
-	Timestamp        int64          `json:"timestamp"`
+	TimestampMs      uint64         `json:"timestamp"`
 	ValidatorAddress common.Address `json:"validator_address"`
 	ValidatorIndex   int32          `json:"validator_index"`
 	Signature        []byte         `json:"signature"`
@@ -78,8 +78,8 @@ func (vote *Vote) CommitSig() CommitSig {
 		BlockIDFlag: blockIDFlag,
 		// TODO: use eth address
 		// ValidatorAddress: vote.ValidatorAddress,
-		Timestamp: vote.Timestamp,
-		Signature: vote.Signature,
+		TimestampMs: vote.TimestampMs,
+		Signature:   vote.Signature,
 	}
 }
 

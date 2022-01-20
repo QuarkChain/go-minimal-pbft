@@ -102,11 +102,11 @@ func validateBlock(state consensus.ChainState, block *consensus.Block) error {
 
 // weightedTime for computing a median.
 type weightedTime struct {
-	TimeMs int64
+	TimeMs uint64
 	Weight int64
 }
 
-func MedianTime(commit *consensus.Commit, validators *consensus.ValidatorSet) int64 {
+func MedianTime(commit *consensus.Commit, validators *consensus.ValidatorSet) uint64 {
 	weightedTimes := make([]*weightedTime, len(commit.Signatures))
 
 	for i, commitSig := range commit.Signatures {
@@ -117,7 +117,7 @@ func MedianTime(commit *consensus.Commit, validators *consensus.ValidatorSet) in
 		// If there's no condition, TestValidateBlockCommit panics; not needed normally.
 		if validator != nil {
 			// totalVotingPower += validator.VotingPower
-			weightedTimes[i] = &weightedTime{TimeMs: commitSig.Timestamp, Weight: 1}
+			weightedTimes[i] = &weightedTime{TimeMs: commitSig.TimestampMs, Weight: 1}
 		}
 	}
 
@@ -125,7 +125,7 @@ func MedianTime(commit *consensus.Commit, validators *consensus.ValidatorSet) in
 }
 
 // weightedMedian computes weighted median time for a given array of WeightedTime and the total voting power.
-func weightedMedian(weightedTimes []*weightedTime, totalVotingPower int64) (res int64) {
+func weightedMedian(weightedTimes []*weightedTime, totalVotingPower int64) (res uint64) {
 	median := totalVotingPower / 2
 
 	sort.Slice(weightedTimes, func(i, j int) bool {

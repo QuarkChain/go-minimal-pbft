@@ -9,7 +9,7 @@ import (
 type Block struct {
 	LastBlockID     common.Hash
 	Height          uint64
-	TimeMs          int64 // TODO: convert to uint64
+	TimeMs          uint64
 	ProposerAddress common.Address
 	LastCommit      *Commit
 }
