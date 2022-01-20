@@ -72,11 +72,11 @@ const (
 )
 
 type BlockStore interface {
-	Base() int64
-	Height() int64
-	Size() int64
+	Base() uint64   // first known contiguous block height
+	Height() uint64 // last known contiguous block height
+	Size() uint64   // return number of blocks in the store
 
-	LoadBlockCommit(height int64) *Commit
+	LoadBlockCommit(height uint64) *Commit
 	LoadSeenCommit() *Commit
 
 	SaveBlock(*Block, *Commit)
@@ -119,7 +119,7 @@ type ConsensusConfig struct {
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
-	DoubleSignCheckHeight int64 `mapstructure:"double-sign-check-height"`
+	DoubleSignCheckHeight uint64 `mapstructure:"double-sign-check-height"`
 }
 
 // Propose returns the amount of time to wait for a proposal
@@ -156,7 +156,7 @@ type Commit struct {
 	// ValidatorSet order.
 	// Any peer with a block can gossip signatures by index with a peer without
 	// recalculating the active ValidatorSet.
-	Height     int64       `json:"height"`
+	Height     uint64      `json:"height"`
 	Round      int32       `json:"round"`
 	BlockID    common.Hash `json:"block_id"`
 	Signatures []CommitSig `json:"signatures"`
@@ -228,7 +228,7 @@ type CommitSig struct {
 }
 
 // NewCommit returns a new Commit.
-func NewCommit(height int64, round int32, blockID common.Hash, commitSigs []CommitSig) *Commit {
+func NewCommit(height uint64, round int32, blockID common.Hash, commitSigs []CommitSig) *Commit {
 	return &Commit{
 		Height:     height,
 		Round:      round,
@@ -259,10 +259,10 @@ var msgQueueSize = 1000
 type ChainState struct {
 	// immutable
 	ChainID       string
-	InitialHeight int64 // should be 1, not 0, when starting from height 1
+	InitialHeight uint64 // should be 1, not 0, when starting from height 1
 
 	// LastBlockHeight=0 at genesis (ie. block(H=0) does not exist)
-	LastBlockHeight int64
+	LastBlockHeight uint64
 	LastBlockID     common.Hash
 	LastBlockTime   time.Time
 
@@ -304,7 +304,6 @@ func (state ChainState) Copy() ChainState {
 // The internal state machine receives input from peers, the internal validator, and from a timer.
 type SimpleState struct {
 	// service.BaseService
-	logger log.Logger
 
 	// config details
 	config            *ConsensusConfig
@@ -349,11 +348,11 @@ type SimpleState struct {
 	nSteps int
 
 	// some functions can be overwritten for testing
-	decideProposal     func(height int64, round int32)
-	doPrevote          func(ctx context.Context, height int64, round int32)
+	decideProposal     func(height uint64, round int32)
+	doPrevote          func(ctx context.Context, height uint64, round int32)
 	setProposal        func(proposal *Proposal) error
 	createProposalFunc func(
-		height int64,
+		height uint64,
 		commit *Commit,
 		proposerAddr common.Address,
 	) *Block
@@ -423,7 +422,7 @@ func (cs *SimpleState) String() string {
 
 // GetLastHeight returns the last height committed.
 // If there were no blocks, returns 0.
-func (cs *SimpleState) GetLastHeight() int64 {
+func (cs *SimpleState) GetLastHeight() uint64 {
 	cs.mtx.RLock()
 	defer cs.mtx.RUnlock()
 	return cs.RoundState.Height - 1
@@ -482,7 +481,7 @@ func (cs *SimpleState) SetTimeoutTicker(timeoutTicker TimeoutTicker) {
 }
 
 // LoadCommit loads the commit for a given height.
-func (cs *SimpleState) LoadCommit(height int64) *Commit {
+func (cs *SimpleState) LoadCommit(height uint64) *Commit {
 	cs.mtx.RLock()
 	defer cs.mtx.RUnlock()
 
@@ -733,7 +732,7 @@ func (cs *SimpleState) SetProposalAndBlock(
 //------------------------------------------------------------
 // internal functions for managing the state
 
-func (cs *SimpleState) updateHeight(height int64) {
+func (cs *SimpleState) updateHeight(height uint64) {
 	cs.Height = height
 }
 
@@ -750,7 +749,7 @@ func (cs *SimpleState) scheduleRound0(rs *RoundState) {
 }
 
 // Attempt to schedule a timeout (by sending timeoutInfo on the tickChan)
-func (cs *SimpleState) scheduleTimeout(duration time.Duration, height int64, round int32, step RoundStepType) {
+func (cs *SimpleState) scheduleTimeout(duration time.Duration, height uint64, round int32, step RoundStepType) {
 	// TODO(metahub): enable timeout
 	// cs.timeoutTicker.ScheduleTimeout(timeoutInfo{duration, height, round, step})
 }
@@ -1134,7 +1133,7 @@ func (cs *SimpleState) handleTimeout(
 // Enter: +2/3 precommits for nil at (height,round-1)
 // Enter: +2/3 prevotes any or +2/3 precommits for block or any from (height, round)
 // NOTE: cs.StartTime was already set for height.
-func (cs *SimpleState) enterNewRound(ctx context.Context, height int64, round int32) {
+func (cs *SimpleState) enterNewRound(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cs.Step != RoundStepNewHeight) {
 		log.Debug(
 			"entering new round with invalid args",
@@ -1182,7 +1181,7 @@ func (cs *SimpleState) enterNewRound(ctx context.Context, height int64, round in
 // Enter (CreateEmptyBlocks, CreateEmptyBlocksInterval > 0 ):
 //		after enterNewRound(height,round), after timeout of CreateEmptyBlocksInterval
 // Enter (!CreateEmptyBlocks) : after enterNewRound(height,round), once txs are in the mempool
-func (cs *SimpleState) enterPropose(ctx context.Context, height int64, round int32) {
+func (cs *SimpleState) enterPropose(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPropose <= cs.Step) {
 		log.Debug(
 			"entering propose step with invalid args",
@@ -1254,7 +1253,7 @@ func (cs *SimpleState) isProposer(address common.Address) bool {
 	return cs.Validators.GetProposer().Address == address
 }
 
-func (cs *SimpleState) defaultDecideProposal(height int64, round int32) {
+func (cs *SimpleState) defaultDecideProposal(height uint64, round int32) {
 	var block *Block
 
 	// Decide on block
@@ -1356,7 +1355,7 @@ func (cs *SimpleState) createProposalBlock() (block *Block) {
 // Enter: proposal block and POL is ready.
 // Prevote for LockedBlock if we're locked, or ProposalBlock if valid.
 // Otherwise vote nil.
-func (cs *SimpleState) enterPrevote(ctx context.Context, height int64, round int32) {
+func (cs *SimpleState) enterPrevote(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrevote <= cs.Step) {
 		log.Debug(
 			"entering prevote step with invalid args",
@@ -1381,7 +1380,7 @@ func (cs *SimpleState) enterPrevote(ctx context.Context, height int64, round int
 	// (so we have more time to try and collect +2/3 prevotes for a single block)
 }
 
-func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height int64, round int32) {
+func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height uint64, round int32) {
 	// If a block is locked, prevote that.
 	if cs.LockedBlock != nil {
 		log.Debug("prevote step; already locked on a block; prevoting locked block", "height", height, "round", round)
@@ -1414,7 +1413,7 @@ func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height int64, round
 }
 
 // Enter: any +2/3 prevotes at next round.
-func (cs *SimpleState) enterPrevoteWait(ctx context.Context, height int64, round int32) {
+func (cs *SimpleState) enterPrevoteWait(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrevoteWait <= cs.Step) {
 		log.Debug(
 			"entering prevote wait step with invalid args",
@@ -1449,7 +1448,7 @@ func (cs *SimpleState) enterPrevoteWait(ctx context.Context, height int64, round
 // Lock & precommit the ProposalBlock if we have enough prevotes for it (a POL in this round)
 // else, unlock an existing lock and precommit nil if +2/3 of prevotes were nil,
 // else, precommit nil otherwise.
-func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round int32) {
+func (cs *SimpleState) enterPrecommit(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrecommit <= cs.Step) {
 		log.Debug(
 			"entering precommit step with invalid args",
@@ -1541,7 +1540,7 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height int64, round i
 }
 
 // Enter: any +2/3 precommits for next round.
-func (cs *SimpleState) enterPrecommitWait(ctx context.Context, height int64, round int32) {
+func (cs *SimpleState) enterPrecommitWait(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cs.TriggeredTimeoutPrecommit) {
 		log.Debug(
 			"entering precommit wait step with invalid args",
@@ -1572,7 +1571,7 @@ func (cs *SimpleState) enterPrecommitWait(ctx context.Context, height int64, rou
 }
 
 // Enter: +2/3 precommits for block
-func (cs *SimpleState) enterCommit(ctx context.Context, height int64, commitRound int32) {
+func (cs *SimpleState) enterCommit(ctx context.Context, height uint64, commitRound int32) {
 	if cs.Height != height || RoundStepCommit <= cs.Step {
 		log.Debug(
 			"entering commit step with invalid args",
@@ -1625,7 +1624,7 @@ func (cs *SimpleState) enterCommit(ctx context.Context, height int64, commitRoun
 }
 
 // If we have the block AND +2/3 commits for it, finalize.
-func (cs *SimpleState) tryFinalizeCommit(ctx context.Context, height int64) {
+func (cs *SimpleState) tryFinalizeCommit(ctx context.Context, height uint64) {
 	if cs.Height != height {
 		panic(fmt.Sprintf("tryFinalizeCommit() cs.Height: %v vs height: %v", cs.Height, height))
 	}
@@ -1652,7 +1651,7 @@ func (cs *SimpleState) tryFinalizeCommit(ctx context.Context, height int64) {
 }
 
 // Increment height and goto RoundStepNewHeight
-func (cs *SimpleState) finalizeCommit(ctx context.Context, height int64) {
+func (cs *SimpleState) finalizeCommit(ctx context.Context, height uint64) {
 	if cs.Height != height || cs.Step != RoundStepCommit {
 		log.Debug(
 			"entering finalize commit step",
@@ -2049,23 +2048,23 @@ func (cs *SimpleState) signVote(
 // any vote from this validator will have time at least time T + 1ms.
 // This is needed, as monotonicity of time is a guarantee that BFT time provides.
 func (cs *SimpleState) voteTime() int64 {
-	now := tmtime.Now()
+	now := tmtime.Now().UnixMilli()
 	minVoteTime := now
 	// Minimum time increment between blocks
-	const timeIota = time.Millisecond
+	timeIota := int64(1) // in milli
 	// TODO: We should remove next line in case we don't vote for v in case cs.ProposalBlock == nil,
 	// even if cs.LockedBlock != nil. See https://docs.tendermint.com/master/spec/.
 	if cs.LockedBlock != nil {
 		// See the BFT time spec https://docs.tendermint.com/master/spec/consensus/bft-time.html
-		minVoteTime = cs.LockedBlock.Time.Add(timeIota)
+		minVoteTime = cs.LockedBlock.Time + timeIota
 	} else if cs.ProposalBlock != nil {
-		minVoteTime = cs.ProposalBlock.Time.Add(timeIota)
+		minVoteTime = cs.ProposalBlock.Time + timeIota
 	}
 
-	if now.After(minVoteTime) {
-		return now.UnixMilli()
+	if now > minVoteTime {
+		return now
 	}
-	return minVoteTime.UnixMilli()
+	return minVoteTime
 }
 
 // sign the vote and publish on internalMsgQueue
@@ -2131,7 +2130,7 @@ func (cs *SimpleState) updatePrivValidatorPubKey() error {
 }
 
 // look back to check existence of the node's consensus votes before joining consensus
-func (cs *SimpleState) checkDoubleSigningRisk(height int64) error {
+func (cs *SimpleState) checkDoubleSigningRisk(height uint64) error {
 	if cs.privValidator != nil && cs.privValidatorPubKey != nil && cs.config.DoubleSignCheckHeight > 0 && height > 0 {
 		valAddr := cs.privValidatorPubKey.Address()
 		doubleSignCheckHeight := cs.config.DoubleSignCheckHeight
@@ -2139,7 +2138,7 @@ func (cs *SimpleState) checkDoubleSigningRisk(height int64) error {
 			doubleSignCheckHeight = height
 		}
 
-		for i := int64(1); i < doubleSignCheckHeight; i++ {
+		for i := uint64(1); i < doubleSignCheckHeight; i++ {
 			lastCommit := cs.LoadCommit(height - i)
 			if lastCommit != nil {
 				for sigIdx, s := range lastCommit.Signatures {

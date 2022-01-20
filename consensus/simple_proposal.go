@@ -31,7 +31,7 @@ func Canonical(t time.Time) time.Time {
 // a so-called Proof-of-Lock (POL) round, as noted in the POLRound.
 // If POLRound >= 0, then BlockID corresponds to the block that is locked in POLRound.
 type Proposal struct {
-	Height    int64       `json:"height"`
+	Height    uint64      `json:"height"`
 	Round     int32       `json:"round"`     // there can not be greater than 2_147_483_647 rounds
 	POLRound  int32       `json:"pol_round"` // -1 if null.
 	BlockID   common.Hash `json:"block_id"`
@@ -41,7 +41,7 @@ type Proposal struct {
 
 // NewProposal returns a new Proposal.
 // If there is no POLRound, polRound should be -1.
-func NewProposal(height int64, round int32, polRound int32, blockID common.Hash) *Proposal {
+func NewProposal(height uint64, round int32, polRound int32, blockID common.Hash) *Proposal {
 	return &Proposal{
 		Height:    height,
 		Round:     round,

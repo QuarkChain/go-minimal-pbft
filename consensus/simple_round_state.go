@@ -7,8 +7,8 @@ import (
 )
 
 type Block struct {
-	Height int64
-	Time   time.Time
+	Height uint64
+	Time   int64 // TODO: convert to uint64
 }
 
 func (b *Block) Hash() common.Hash {
@@ -19,7 +19,7 @@ func (b *Block) Hash() common.Hash {
 // NOTE: Not thread safe. Should only be manipulated by functions downstream
 // of the cs.receiveRoutine
 type RoundState struct {
-	Height    int64         `json:"height"` // Height we are working on
+	Height    uint64        `json:"height"` // Height we are working on
 	Round     int32         `json:"round"`
 	Step      RoundStepType `json:"step"`
 	StartTime time.Time     `json:"start_time"`
@@ -46,7 +46,7 @@ type RoundState struct {
 
 // NOTE: This goes into the replay WAL
 type EventDataRoundState struct {
-	Height int64  `json:"height"`
+	Height uint64 `json:"height"`
 	Round  int32  `json:"round"`
 	Step   string `json:"step"`
 }

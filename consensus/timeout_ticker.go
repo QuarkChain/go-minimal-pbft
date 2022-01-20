@@ -14,7 +14,7 @@ var (
 // internally generated messages which may update the state
 type timeoutInfo struct {
 	Duration time.Duration `json:"duration"`
-	Height   int64         `json:"height"`
+	Height   uint64        `json:"height"`
 	Round    int32         `json:"round"`
 	Step     RoundStepType `json:"step"`
 }

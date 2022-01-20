@@ -80,7 +80,7 @@ type VoteRaw struct {
 func (v *VoteRaw) toVote() (*consensus.Vote, error) {
 	cv := &consensus.Vote{
 		Type:             consensus.SignedMsgType(v.Type),
-		Height:           int64(v.Height),
+		Height:           v.Height,
 		Round:            int32(v.Round),
 		BlockID:          v.BlockID,
 		Timestamp:        int64(v.Timestamp),
@@ -107,7 +107,7 @@ func encodeVote(v *consensus.Vote) ([]byte, error) {
 
 func (p *ProposalRaw) toProposal() (*consensus.Proposal, error) {
 	cp := &consensus.Proposal{
-		Height:    int64(p.Height),
+		Height:    p.Height,
 		Round:     int32(p.Round),
 		POLRound:  int32(p.POLRound),
 		BlockID:   p.BlockID,

@@ -66,7 +66,7 @@ func (vs *blockVotes) getByIndex(index int32) *Vote {
 
 type VoteSet struct {
 	chainID       string
-	height        int64
+	height        uint64
 	round         int32
 	signedMsgType SignedMsgType
 	valSet        *ValidatorSet
@@ -80,7 +80,7 @@ type VoteSet struct {
 }
 
 // Constructs a new VoteSet struct used to accumulate votes for given height/round.
-func NewVoteSet(chainID string, height int64, round int32,
+func NewVoteSet(chainID string, height uint64, round int32,
 	signedMsgType SignedMsgType, valSet *ValidatorSet) *VoteSet {
 	if height == 0 {
 		panic("Cannot make VoteSet for height == 0, doesn't make sense.")
@@ -316,7 +316,7 @@ func (voteSet *VoteSet) MakeCommit() *Commit {
 }
 
 // Implements VoteSetReader.
-func (voteSet *VoteSet) GetHeight() int64 {
+func (voteSet *VoteSet) GetHeight() uint64 {
 	if voteSet == nil {
 		return 0
 	}
@@ -395,7 +395,7 @@ var (
 
 type HeightVoteSet struct {
 	chainID string
-	height  int64
+	height  uint64
 	valSet  *ValidatorSet
 
 	mtx               sync.Mutex
@@ -404,7 +404,7 @@ type HeightVoteSet struct {
 	peerCatchupRounds map[string][]int32     // keys: peer.ID; values: at most 2 rounds
 }
 
-func NewHeightVoteSet(chainID string, height int64, valSet *ValidatorSet) *HeightVoteSet {
+func NewHeightVoteSet(chainID string, height uint64, valSet *ValidatorSet) *HeightVoteSet {
 	hvs := &HeightVoteSet{
 		chainID: chainID,
 	}
@@ -412,7 +412,7 @@ func NewHeightVoteSet(chainID string, height int64, valSet *ValidatorSet) *Heigh
 	return hvs
 }
 
-func (hvs *HeightVoteSet) Reset(height int64, valSet *ValidatorSet) {
+func (hvs *HeightVoteSet) Reset(height uint64, valSet *ValidatorSet) {
 	hvs.mtx.Lock()
 	defer hvs.mtx.Unlock()
 
