@@ -33,7 +33,7 @@ func TestSerdeVote(t *testing.T) {
 		Height:           4,
 		Round:            3,
 		TimestampMs:      uint64(time.Now().UnixMilli()),
-		BlockID:          common.Hash{},
+		BlockID:          common.BytesToHash([]byte{1, 2}),
 		ValidatorAddress: common.BigToAddress(big.NewInt(12345)),
 		ValidatorIndex:   5,
 		Signature:        []byte{'2'},
