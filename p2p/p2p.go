@@ -107,12 +107,12 @@ func encodeVote(v *consensus.Vote) ([]byte, error) {
 
 func (p *ProposalRaw) toProposal() (*consensus.Proposal, error) {
 	cp := &consensus.Proposal{
-		Height:    p.Height,
-		Round:     int32(p.Round),
-		POLRound:  int32(p.POLRound),
-		BlockID:   p.BlockID,
-		Timestamp: int64(p.Timestamp),
-		Signature: p.Signature,
+		Height:      p.Height,
+		Round:       int32(p.Round),
+		POLRound:    int32(p.POLRound),
+		BlockID:     p.BlockID,
+		TimestampMs: int64(p.Timestamp),
+		Signature:   p.Signature,
 	}
 	return cp, cp.ValidateBasic()
 }
@@ -132,7 +132,7 @@ func encodeProposal(p *consensus.Proposal) ([]byte, error) {
 		Round:     uint32(p.Round),
 		POLRound:  uint32(p.POLRound),
 		BlockID:   p.BlockID,
-		Timestamp: uint64(p.Timestamp),
+		Timestamp: uint64(p.TimestampMs),
 		Signature: p.Signature,
 	}
 	return rlp.EncodeToBytes(pr)

@@ -12,12 +12,12 @@ import (
 
 func TestSerdeProposal(t *testing.T) {
 	p := &consensus.Proposal{
-		Height:    4,
-		Round:     3,
-		POLRound:  -1,
-		Timestamp: time.Now().UnixMilli(),
-		BlockID:   common.Hash{},
-		Signature: []byte{'1'},
+		Height:      4,
+		Round:       3,
+		POLRound:    -1,
+		TimestampMs: time.Now().UnixMilli(),
+		BlockID:     common.Hash{},
+		Signature:   []byte{'1'},
 	}
 
 	data, err := encodeProposal(p)
