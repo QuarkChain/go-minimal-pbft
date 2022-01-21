@@ -1711,9 +1711,8 @@ func (cs *SimpleState) defaultSetProposal(proposal *Proposal) error {
 		return ErrInvalidProposalPOLRound
 	}
 
-	p := proposal.ToUnsignedBytes()
 	// Verify signature
-	if !cs.Validators.GetProposer().PubKey.VerifySignature(p, proposal.Signature) {
+	if !cs.Validators.GetProposer().PubKey.VerifySignature(proposal.ProposalSignBytes(cs.state.ChainID), proposal.Signature) {
 		return ErrInvalidProposalSignature
 	}
 

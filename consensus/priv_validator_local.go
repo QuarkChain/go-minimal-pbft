@@ -50,5 +50,12 @@ func (pv *PrivValidatorLocal) SignVote(ctx context.Context, chainId string, vote
 }
 
 func (pv *PrivValidatorLocal) SignProposal(ctx context.Context, chainID string, proposal *Proposal) error {
-	panic("not implemented")
+	// TODO: sanity check
+	b := proposal.ProposalSignBytes(chainID)
+
+	h := crypto.Keccak256Hash(b)
+
+	sign, err := crypto.Sign(h[:], pv.privKey)
+	proposal.Signature = sign
+	return err
 }

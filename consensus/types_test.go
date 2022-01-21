@@ -112,3 +112,21 @@ func TestSignVote(t *testing.T) {
 	pv.SignVote(context.Background(), "aaa", &v)
 	assert.NoError(t, v.Verify("aaa", pubKey))
 }
+
+func TestSignProposal(t *testing.T) {
+	pv := GeneratePrivValidatorLocal()
+	pubKey, err := pv.GetPubKey(context.Background())
+	assert.NoError(t, err)
+
+	proposal := Proposal{
+		Height:      20,
+		Round:       2,
+		POLRound:    -1,
+		BlockID:     common.Hash{},
+		TimestampMs: 352353,
+		Signature:   []byte{},
+	}
+
+	pv.SignProposal(context.Background(), "aaa", &proposal)
+	assert.True(t, pubKey.VerifySignature(proposal.ProposalSignBytes("aaa"), proposal.Signature))
+}

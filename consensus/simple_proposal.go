@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Now returns the current time in UTC with no monotonic component.
@@ -31,28 +32,50 @@ func Canonical(t time.Time) time.Time {
 // a so-called Proof-of-Lock (POL) round, as noted in the POLRound.
 // If POLRound >= 0, then BlockID corresponds to the block that is locked in POLRound.
 type Proposal struct {
-	Height    uint64      `json:"height"`
-	Round     int32       `json:"round"`     // there can not be greater than 2_147_483_647 rounds
-	POLRound  int32       `json:"pol_round"` // -1 if null.
-	BlockID   common.Hash `json:"block_id"`
-	Timestamp int64       `json:"timestamp"` // unix ms
-	Signature []byte      `json:"signature"`
+	Height      uint64      `json:"height"`
+	Round       int32       `json:"round"`     // there can not be greater than 2_147_483_647 rounds
+	POLRound    int32       `json:"pol_round"` // -1 if null.
+	BlockID     common.Hash `json:"block_id"`
+	TimestampMs int64       `json:"timestamp"` // unix ms
+	Signature   []byte      `json:"signature"`
 }
 
 // NewProposal returns a new Proposal.
 // If there is no POLRound, polRound should be -1.
 func NewProposal(height uint64, round int32, polRound int32, blockID common.Hash) *Proposal {
 	return &Proposal{
-		Height:    height,
-		Round:     round,
-		POLRound:  polRound,
-		BlockID:   blockID,
-		Timestamp: CanonicalNowMs(),
+		Height:      height,
+		Round:       round,
+		POLRound:    polRound,
+		BlockID:     blockID,
+		TimestampMs: CanonicalNowMs(),
 	}
 }
 
-func (p *Proposal) ToUnsignedBytes() []byte {
-	return nil
+type ProposalForSign struct {
+	Height      uint64
+	Round       uint32
+	POLRound    uint32
+	BlockID     common.Hash
+	TimestampMs uint64
+	ChainID     string
+}
+
+func (p *Proposal) ProposalSignBytes(chainID string) []byte {
+	ps := ProposalForSign{
+		Height:      p.Height,
+		Round:       uint32(p.Round),
+		POLRound:    uint32(p.POLRound),
+		BlockID:     p.BlockID,
+		TimestampMs: uint64(p.TimestampMs),
+		ChainID:     chainID,
+	}
+
+	data, err := rlp.EncodeToBytes(&ps)
+	if err != nil {
+		panic("fail to encode proposal")
+	}
+	return data
 }
 
 // ProposalMessage is sent when a new block is proposed.
