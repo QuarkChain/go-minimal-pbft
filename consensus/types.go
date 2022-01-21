@@ -125,6 +125,23 @@ func NewCommit(height uint64, round int32, blockID common.Hash, commitSigs []Com
 	}
 }
 
+// CommitToVoteSet constructs a VoteSet from the Commit and validator set.
+// Panics if signatures from the commit can't be added to the voteset.
+// Inverse of VoteSet.MakeCommit().
+func CommitToVoteSet(chainID string, commit *Commit, vals *ValidatorSet) *VoteSet {
+	voteSet := NewVoteSet(chainID, commit.Height, SafeConvertInt32FromUint32(commit.Round), PrecommitType, vals)
+	for idx, commitSig := range commit.Signatures {
+		if commitSig.Absent() {
+			continue // OK, some precommits can be missing.
+		}
+		added, err := voteSet.AddVote(commit.GetVote(int32(idx)))
+		if !added || err != nil {
+			panic(fmt.Sprintf("Failed to reconstruct LastCommit: %v", err))
+		}
+	}
+	return voteSet
+}
+
 // BlockIDFlag indicates which BlockID the signature is for.
 type BlockIDFlag byte
 

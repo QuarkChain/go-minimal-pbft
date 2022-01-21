@@ -86,15 +86,14 @@ func (vote *Vote) CommitSig() CommitSig {
 		blockIDFlag = BlockIDFlagNil
 	default:
 		blockIDFlag = BlockIDFlagCommit
-		panic(fmt.Sprintf("Invalid vote %v - expected BlockID to be either empty or complete", vote))
+		// panic(fmt.Sprintf("Invalid vote %v - expected BlockID to be either empty or complete", vote))
 	}
 
 	return CommitSig{
-		BlockIDFlag: blockIDFlag,
-		// TODO: use eth address
-		// ValidatorAddress: vote.ValidatorAddress,
-		TimestampMs: vote.TimestampMs,
-		Signature:   vote.Signature,
+		BlockIDFlag:      blockIDFlag,
+		ValidatorAddress: vote.ValidatorAddress,
+		TimestampMs:      vote.TimestampMs,
+		Signature:        vote.Signature,
 	}
 }
 
@@ -122,6 +121,9 @@ func (vote *Vote) ValidateBasic() error {
 	}
 
 	// NOTE: Timestamp validation is subtle and handled elsewhere.
+	if (vote.BlockID == common.Hash{}) {
+		return fmt.Errorf("empty blockID")
+	}
 
 	// if err := vote.BlockID.ValidateBasic(); err != nil {
 	// 	return fmt.Errorf("wrong BlockID: %v", err)
@@ -146,9 +148,9 @@ func (vote *Vote) ValidateBasic() error {
 		return errors.New("signature is missing")
 	}
 
-	// if len(vote.Signature) > MaxSignatureSize {
-	// 	return fmt.Errorf("signature is too big (max: %d)", MaxSignatureSize)
-	// }
+	if len(vote.Signature) > MaxSignatureSize {
+		return fmt.Errorf("signature is too big (max: %d)", MaxSignatureSize)
+	}
 
 	return nil
 }
