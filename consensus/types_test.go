@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -90,4 +91,24 @@ func TestVoteSignBytes(t *testing.T) {
 	v.Height = 21
 	bs2 := v.VoteSignBytes("aaa")
 	assert.NotEqual(t, bs0, bs2)
+}
+
+func TestSignVote(t *testing.T) {
+	pv := GeneratePrivValidatorLocal()
+	pubKey, err := pv.GetPubKey(context.Background())
+	assert.NoError(t, err)
+
+	v := Vote{
+		Type:             PrecommitType,
+		Height:           20,
+		Round:            2,
+		BlockID:          common.Hash{},
+		TimestampMs:      352353,
+		ValidatorAddress: pubKey.Address(),
+		ValidatorIndex:   3,
+		Signature:        []byte{},
+	}
+
+	pv.SignVote(context.Background(), "aaa", &v)
+	assert.NoError(t, v.Verify("aaa", pubKey))
 }

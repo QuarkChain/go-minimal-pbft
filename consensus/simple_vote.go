@@ -9,14 +9,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 )
 
-type PubKey interface {
-	Address() common.Address
-	Bytes() []byte
-	VerifySignature(msg []byte, sig []byte) bool
-	Equals(PubKey) bool
-	Type() string
-}
-
 // Vote represents a prevote, precommit, or commit vote from validators for
 // consensus.
 type Vote struct {
