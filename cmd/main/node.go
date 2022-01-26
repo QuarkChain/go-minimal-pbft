@@ -23,6 +23,7 @@ var (
 	p2pPort      *uint
 	p2pBootstrap *string
 	nodeKeyPath  *string
+	valKeyPath   *string
 	nodeName     *string
 	verbosity    *int
 )
@@ -43,6 +44,8 @@ func init() {
 	nodeKeyPath = NodeCmd.Flags().String("nodeKey", "", "Path to node key (will be generated if it doesn't exist)")
 
 	verbosity = NodeCmd.Flags().Int("verbosity", 3, "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail")
+
+	valKeyPath = NodeCmd.Flags().String("valKey", "", "Path to validator key (empty if not a validator)")
 
 	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
 	glogger.Verbosity(log.LvlInfo)
@@ -81,6 +84,26 @@ func runNode(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Error("Failed to load node key", "err", err)
 		return
+	}
+
+	if *nodeKeyPath == "" {
+		log.Error("Please specify --nodeKey")
+	}
+
+	var privVal consensus.PrivValidator
+
+	if *valKeyPath != "" {
+		valKey, err := loadValidatorKey(*valKeyPath)
+		if err != nil {
+			log.Error("Failed to load validator key", "err", err)
+			return
+		}
+		privVal = consensus.NewPrivValidatorLocal(valKey)
+		pubVal, err := privVal.GetPubKey(rootCtx)
+		if err != nil {
+			log.Error("Failed to load valiator pub key", "err", err)
+		}
+		log.Info("Running validator", "addr", pubVal.Address())
 	}
 
 	go p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)

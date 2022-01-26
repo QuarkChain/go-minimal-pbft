@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/sys/unix"
 
 	homedir "github.com/mitchellh/go-homedir"
 )
@@ -23,6 +25,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.guardiand.yaml)")
 	rootCmd.AddCommand(NodeCmd)
+	rootCmd.AddCommand(KeygenCmd)
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -49,6 +52,23 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
+}
+
+// lockMemory locks current and future pages in memory to protect secret keys from being swapped out to disk.
+// It's possible (and strongly recommended) to deploy Wormhole such that keys are only ever
+// stored in memory and never touch the disk. This is a privileged operation and requires CAP_IPC_LOCK.
+func lockMemory() {
+	err := unix.Mlockall(syscall.MCL_CURRENT | syscall.MCL_FUTURE)
+	if err != nil {
+		fmt.Printf("Failed to lock memory: %v (CAP_IPC_LOCK missing?)\n", err)
+		os.Exit(1)
+	}
+}
+
+// setRestrictiveUmask masks the group and world bits. This ensures that key material
+// and sockets we create aren't accidentally group- or world-readable.
+func setRestrictiveUmask() {
+	syscall.Umask(0077) // cannot fail
 }
 
 func main() {

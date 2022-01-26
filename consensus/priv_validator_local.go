@@ -10,7 +10,7 @@ import (
 )
 
 type PrivValidatorLocal struct {
-	privKey *ecdsa.PrivateKey
+	PrivKey *ecdsa.PrivateKey
 }
 
 // generate a local priv validator with random key.
@@ -21,8 +21,12 @@ func GeneratePrivValidatorLocal() PrivValidator {
 	}
 
 	return &PrivValidatorLocal{
-		privKey: pk,
+		PrivKey: pk,
 	}
+}
+
+func NewPrivValidatorLocal(privKey *ecdsa.PrivateKey) *PrivValidatorLocal {
+	return &PrivValidatorLocal{PrivKey: privKey}
 }
 
 func pubKeyToAddress(pub []byte) common.Address {
@@ -33,7 +37,7 @@ func pubKeyToAddress(pub []byte) common.Address {
 }
 
 func (pv *PrivValidatorLocal) Address() common.Address {
-	return crypto.PubkeyToAddress(pv.privKey.PublicKey)
+	return crypto.PubkeyToAddress(pv.PrivKey.PublicKey)
 }
 
 func (pv *PrivValidatorLocal) GetPubKey(context.Context) (PubKey, error) {
@@ -45,7 +49,7 @@ func (pv *PrivValidatorLocal) SignVote(ctx context.Context, chainId string, vote
 	b := vote.VoteSignBytes(chainId)
 
 	h := crypto.Keccak256Hash(b)
-	sign, err := crypto.Sign(h[:], pv.privKey)
+	sign, err := crypto.Sign(h[:], pv.PrivKey)
 	vote.Signature = sign
 
 	return err
@@ -57,7 +61,7 @@ func (pv *PrivValidatorLocal) SignProposal(ctx context.Context, chainID string, 
 
 	h := crypto.Keccak256Hash(b)
 
-	sign, err := crypto.Sign(h[:], pv.privKey)
+	sign, err := crypto.Sign(h[:], pv.PrivKey)
 	proposal.Signature = sign
 	return err
 }
