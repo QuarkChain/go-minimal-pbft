@@ -10,7 +10,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
 )
 
 // Message defines an interface that the consensus domain types implement. When
@@ -85,80 +84,6 @@ type BlockStore interface {
 type BlockExecutor interface {
 	ValidateBlock(ChainState, *Block) error                             // validate the block by tentatively executing it
 	ApplyBlock(context.Context, ChainState, *Block) (ChainState, error) // apply the block
-}
-
-// ConsensusConfig defines the configuration for the Tendermint consensus service,
-// including timeouts and details about the WAL and the block structure.
-type ConsensusConfig struct {
-	RootDir string `mapstructure:"home"`
-	WalPath string `mapstructure:"wal-file"`
-	WalFile string // overrides WalPath if set
-
-	// TODO: remove timeout configs, these should be global not local
-	// How long we wait for a proposal block before prevoting nil
-	TimeoutPropose time.Duration `mapstructure:"timeout-propose"`
-	// How much timeout-propose increases with each round
-	TimeoutProposeDelta time.Duration `mapstructure:"timeout-propose-delta"`
-	// How long we wait after receiving +2/3 prevotes for “anything” (ie. not a single block or nil)
-	TimeoutPrevote time.Duration `mapstructure:"timeout-prevote"`
-	// How much the timeout-prevote increases with each round
-	TimeoutPrevoteDelta time.Duration `mapstructure:"timeout-prevote-delta"`
-	// How long we wait after receiving +2/3 precommits for “anything” (ie. not a single block or nil)
-	TimeoutPrecommit time.Duration `mapstructure:"timeout-precommit"`
-	// How much the timeout-precommit increases with each round
-	TimeoutPrecommitDelta time.Duration `mapstructure:"timeout-precommit-delta"`
-	// How long we wait after committing a block, before starting on the new
-	// height (this gives us a chance to receive some more precommits, even
-	// though we already have +2/3).
-	TimeoutCommit time.Duration `mapstructure:"timeout-commit"`
-
-	// Make progress as soon as we have all the precommits (as if TimeoutCommit = 0)
-	SkipTimeoutCommit bool `mapstructure:"skip-timeout-commit"`
-
-	// Reactor sleep duration parameters
-	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
-	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
-
-	DoubleSignCheckHeight uint64 `mapstructure:"double-sign-check-height"`
-}
-
-func NewDefaultConsesusConfig() *ConsensusConfig {
-	return &ConsensusConfig{
-		TimeoutPropose:        3 * time.Second,
-		TimeoutProposeDelta:   500 * time.Millisecond,
-		TimeoutPrevote:        1 * time.Second,
-		TimeoutPrevoteDelta:   500 * time.Millisecond,
-		TimeoutPrecommit:      1 * time.Second,
-		TimeoutPrecommitDelta: 500 * time.Millisecond,
-		TimeoutCommit:         5 * time.Second,
-	}
-}
-
-// Propose returns the amount of time to wait for a proposal
-func (cfg *ConsensusConfig) Propose(round int32) time.Duration {
-	return time.Duration(
-		cfg.TimeoutPropose.Nanoseconds()+cfg.TimeoutProposeDelta.Nanoseconds()*int64(round),
-	) * time.Nanosecond
-}
-
-// Prevote returns the amount of time to wait for straggler votes after receiving any +2/3 prevotes
-func (cfg *ConsensusConfig) Prevote(round int32) time.Duration {
-	return time.Duration(
-		cfg.TimeoutPrevote.Nanoseconds()+cfg.TimeoutPrevoteDelta.Nanoseconds()*int64(round),
-	) * time.Nanosecond
-}
-
-// Precommit returns the amount of time to wait for straggler votes after receiving any +2/3 precommits
-func (cfg *ConsensusConfig) Precommit(round int32) time.Duration {
-	return time.Duration(
-		cfg.TimeoutPrecommit.Nanoseconds()+cfg.TimeoutPrecommitDelta.Nanoseconds()*int64(round),
-	) * time.Nanosecond
-}
-
-// Commit returns the amount of time to wait for straggler votes after receiving +2/3 precommits
-// for a single block (ie. a commit).
-func (cfg *ConsensusConfig) Commit(t time.Time) time.Time {
-	return t.Add(cfg.TimeoutCommit)
 }
 
 // Absent returns true if CommitSig is absent.
@@ -690,14 +615,13 @@ func (cs *ConsensusState) updateRoundStep(round int32, step RoundStepType) {
 // enterNewRound(height, 0) at cs.StartTime.
 func (cs *ConsensusState) scheduleRound0(rs *RoundState) {
 	// log.Info("scheduleRound0", "now", tmtime.Now(), "startTime", cs.StartTime)
-	sleepDuration := rs.StartTime.Sub(tmtime.Now())
+	sleepDuration := rs.StartTime.Sub(CanonicalNow())
 	cs.scheduleTimeout(sleepDuration, rs.Height, 0, RoundStepNewHeight)
 }
 
 // Attempt to schedule a timeout (by sending timeoutInfo on the tickChan)
 func (cs *ConsensusState) scheduleTimeout(duration time.Duration, height uint64, round int32, step RoundStepType) {
-	// TODO(metahub): enable timeout
-	// cs.timeoutTicker.ScheduleTimeout(timeoutInfo{duration, height, round, step})
+	cs.timeoutTicker.ScheduleTimeout(timeoutInfo{duration, height, round, step})
 }
 
 // send a msg into the receiveRoutine regarding our own proposal, block part, or vote
@@ -829,7 +753,7 @@ func (cs *ConsensusState) updateToState(ctx context.Context, state ChainState) {
 		// to be gathered for the first block.
 		// And alternative solution that relies on clocks:
 		// cs.StartTime = state.LastBlockTime.Add(timeoutCommit)
-		cs.StartTime = cs.config.Commit(tmtime.Now())
+		cs.StartTime = cs.config.Commit(CanonicalNow())
 	} else {
 		cs.StartTime = cs.config.Commit(cs.CommitTime)
 	}
@@ -1089,7 +1013,7 @@ func (cs *ConsensusState) enterNewRound(ctx context.Context, height uint64, roun
 		return
 	}
 
-	if now := tmtime.Now(); cs.StartTime.After(now) {
+	if now := CanonicalNow(); cs.StartTime.After(now) {
 		log.Debug("need to set a buffer and log message here for sanity", "start_time", "height", height, "round", round, cs.StartTime, "now", now)
 	}
 
@@ -1534,7 +1458,7 @@ func (cs *ConsensusState) enterCommit(ctx context.Context, height uint64, commit
 		// keep cs.Round the same, commitRound points to the right Precommits set.
 		cs.updateRoundStep(cs.Round, RoundStepCommit)
 		cs.CommitRound = commitRound
-		cs.CommitTime = tmtime.Now()
+		cs.CommitTime = CanonicalNow()
 		cs.newStep(ctx)
 
 		// Maybe finalize immediately.
@@ -1993,7 +1917,7 @@ func (cs *ConsensusState) signVote(
 // any vote from this validator will have time at least time T + 1ms.
 // This is needed, as monotonicity of time is a guarantee that BFT time provides.
 func (cs *ConsensusState) voteTime() uint64 {
-	now := uint64(tmtime.Now().UnixMilli())
+	now := uint64(CanonicalNowMs())
 	minVoteTime := now
 	// Minimum time increment between blocks
 	timeIota := uint64(1) // in milli
