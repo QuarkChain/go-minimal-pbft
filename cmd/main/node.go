@@ -85,7 +85,7 @@ func runNode(cmd *cobra.Command, args []string) {
 
 	go p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
 
-	consensus.NewConsensusState(rootCtx, consensus.NewDefaultConsesusConfig(), consensus.ChainState{}, NewDefaultBlockExecutor(nil), NewDefaultBlockStore(nil))
+	consensus.NewConsensusState(rootCtx, consensus.NewDefaultConsesusConfig(), consensus.ChainState{}, consensus.NewDefaultBlockExecutor(nil), NewDefaultBlockStore(nil))
 
 	// Running the node
 	log.Info("Running the node")
