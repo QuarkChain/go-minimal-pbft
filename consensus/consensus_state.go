@@ -19,12 +19,10 @@ type Message interface {
 	ValidateBasic() error
 }
 
-type NodeID string
-
 // msgs from the reactor which may update the state
 type MsgInfo struct {
 	Msg    Message `json:"msg"`
-	PeerID NodeID  `json:"peer_key"`
+	PeerID string  `json:"peer_key"`
 }
 
 // SignedMsgType is a type of signed message in the consensus.
@@ -544,17 +542,16 @@ func (cs *ConsensusState) AddVote(ctx context.Context, vote *Vote, peerID string
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-			// TODO: seralize message
-			// case cs.internalMsgQueue <- msgInfo{&VoteMessage{vote}, ""}:
-			// 	return nil
+
+		case cs.internalMsgQueue <- MsgInfo{&VoteMessage{vote}, ""}:
+			return nil
 		}
 	} else {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-			// TODO: seralize message
-			// case cs.peerMsgQueue <- msgInfo{&VoteMessage{vote}, peerID}:
-			// 	return nil
+		case cs.peerMsgQueue <- MsgInfo{&VoteMessage{vote}, peerID}:
+			return nil
 		}
 	}
 
@@ -568,15 +565,15 @@ func (cs *ConsensusState) SetProposal(ctx context.Context, proposal *Proposal, p
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-			// case cs.internalMsgQueue <- msgInfo{&ProposalMessage{proposal}, ""}:
-			// return nil
+		case cs.internalMsgQueue <- MsgInfo{&ProposalMessage{proposal}, ""}:
+			return nil
 		}
 	} else {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-			// case cs.peerMsgQueue <- msgInfo{&ProposalMessage{proposal}, peerID}:
-			// return nil
+		case cs.peerMsgQueue <- MsgInfo{&ProposalMessage{proposal}, peerID}:
+			return nil
 		}
 	}
 
@@ -587,15 +584,12 @@ func (cs *ConsensusState) SetProposal(ctx context.Context, proposal *Proposal, p
 func (cs *ConsensusState) SetProposalAndBlock(
 	ctx context.Context,
 	proposal *Proposal,
-	// block *types.Block,
 	peerID string,
 ) error {
 
 	if err := cs.SetProposal(ctx, proposal, peerID); err != nil {
 		return err
 	}
-
-	// TODO: Set block
 
 	return nil
 }
@@ -858,13 +852,13 @@ func (cs *ConsensusState) receiveRoutine(ctx context.Context, maxSteps int) {
 			// 	))
 			// }
 
-			if _, ok := mi.Msg.(*VoteMessage); ok {
-				// we actually want to simulate failing during
-				// the previous WriteSync, but this isn't easy to do.
-				// Equivalent would be to fail here and manually remove
-				// some bytes from the end of the wal.
-				// fail.Fail() // XXX
-			}
+			// if _, ok := mi.Msg.(*VoteMessage); ok {
+			// we actually want to simulate failing during
+			// the previous WriteSync, but this isn't easy to do.
+			// Equivalent would be to fail here and manually remove
+			// some bytes from the end of the wal.
+			// fail.Fail() // XXX
+			// }
 
 			// handles proposals, block parts, votes
 			cs.handleMsg(ctx, mi)
@@ -1152,12 +1146,8 @@ func (cs *ConsensusState) defaultDecideProposal(height uint64, round int32) {
 	ctx, cancel := context.WithTimeout(context.TODO(), cs.config.TimeoutPropose)
 	defer cancel()
 	if err := cs.privValidator.SignProposal(ctx, cs.state.ChainID, proposal); err == nil {
-		// Signature whould be set
-		// proposal.Signature = p.Signature
-
 		// send proposal and block parts on internal msg queue
-		// TODO(broadcast proposal)
-		// cs.sendInternalMessage(ctx, msgInfo{&ProposalMessage{proposal}, ""})
+		cs.sendInternalMessage(ctx, MsgInfo{&ProposalMessage{proposal}, ""})
 
 		log.Debug("signed proposal", "height", height, "round", round, "proposal", proposal)
 	} else if !cs.replayMode {
@@ -1886,8 +1876,6 @@ func (cs *ConsensusState) signVote(
 		BlockID:          blockID,
 	}
 
-	// v := vote.ToProto()
-
 	// If the signedMessageType is for precommit,
 	// use our local precommit Timeout as the max wait time for getting a singed commit. The same goes for prevote.
 	var timeout time.Duration
@@ -1904,10 +1892,7 @@ func (cs *ConsensusState) signVote(
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()
 
-	// TODO: sign vote
-	err := cs.privValidator.SignVote(ctx, cs.state.ChainID, nil)
-	// vote.Signature = v.Signature
-	// vote.Timestamp = v.Timestamp
+	err := cs.privValidator.SignVote(ctx, cs.state.ChainID, vote)
 
 	return vote, err
 }
@@ -1956,8 +1941,7 @@ func (cs *ConsensusState) signAddVote(ctx context.Context, msgType SignedMsgType
 	// TODO: pass pubKey to signVote
 	vote, err := cs.signVote(msgType, blockID)
 	if err == nil {
-		// TODO:
-		cs.sendInternalMessage(ctx, MsgInfo{&VoteMessage{}, ""})
+		cs.sendInternalMessage(ctx, MsgInfo{&VoteMessage{vote}, ""})
 		log.Debug("signed and pushed vote", "height", cs.Height, "round", cs.Round, "vote", vote)
 		return vote
 	}

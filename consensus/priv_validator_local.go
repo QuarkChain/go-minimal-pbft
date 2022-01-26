@@ -46,6 +46,7 @@ func (pv *PrivValidatorLocal) SignVote(ctx context.Context, chainId string, vote
 
 	sign, err := crypto.Sign(h[:], pv.privKey)
 	vote.Signature = sign
+	vote.TimestampMs = uint64(CanonicalNowMs())
 	return err
 }
 
