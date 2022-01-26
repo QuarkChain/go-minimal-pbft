@@ -54,6 +54,7 @@ type ProposalRaw struct {
 	BlockID   common.Hash
 	Timestamp uint64
 	Signature []byte
+	Block     *consensus.Block
 }
 
 func init() {
@@ -113,6 +114,7 @@ func (p *ProposalRaw) toProposal() (*consensus.Proposal, error) {
 		BlockID:     p.BlockID,
 		TimestampMs: int64(p.Timestamp),
 		Signature:   p.Signature,
+		Block:       p.Block,
 	}
 	return cp, cp.ValidateBasic()
 }
@@ -134,6 +136,7 @@ func encodeProposal(p *consensus.Proposal) ([]byte, error) {
 		BlockID:   p.BlockID,
 		Timestamp: uint64(p.TimestampMs),
 		Signature: p.Signature,
+		Block:     p.Block,
 	}
 	return rlp.EncodeToBytes(pr)
 }

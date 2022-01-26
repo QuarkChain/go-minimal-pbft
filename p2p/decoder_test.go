@@ -11,6 +11,14 @@ import (
 )
 
 func TestSerdeProposal(t *testing.T) {
+	c := consensus.CommitSig{
+		BlockIDFlag:      consensus.BlockIDFlagCommit,
+		ValidatorAddress: common.Address{},
+		TimestampMs:      1133423,
+		Signature:        []byte{},
+	}
+	cm := consensus.NewCommit(5, 6, common.Hash{}, []consensus.CommitSig{c})
+
 	p := &consensus.Proposal{
 		Height:      4,
 		Round:       3,
@@ -18,6 +26,17 @@ func TestSerdeProposal(t *testing.T) {
 		TimestampMs: time.Now().UnixMilli(),
 		BlockID:     common.Hash{},
 		Signature:   []byte{'1'},
+		Block: &consensus.Block{
+			Header: consensus.Header{
+				LastBlockID:     common.Hash{},
+				Height:          6,
+				TimeMs:          34534,
+				ProposerAddress: common.Address{},
+				CommitHash:      common.Hash{},
+			},
+			Data:       []byte{},
+			LastCommit: cm,
+		},
 	}
 
 	data, err := encodeProposal(p)

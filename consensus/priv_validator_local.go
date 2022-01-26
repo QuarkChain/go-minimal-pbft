@@ -41,12 +41,13 @@ func (pv *PrivValidatorLocal) GetPubKey(context.Context) (PubKey, error) {
 }
 
 func (pv *PrivValidatorLocal) SignVote(ctx context.Context, chainId string, vote *Vote) error {
+	vote.TimestampMs = uint64(CanonicalNowMs())
 	b := vote.VoteSignBytes(chainId)
-	h := crypto.Keccak256Hash(b)
 
+	h := crypto.Keccak256Hash(b)
 	sign, err := crypto.Sign(h[:], pv.privKey)
 	vote.Signature = sign
-	vote.TimestampMs = uint64(CanonicalNowMs())
+
 	return err
 }
 

@@ -1189,7 +1189,6 @@ func (cs *ConsensusState) defaultDoPrevote(ctx context.Context, height uint64, r
 	}
 
 	// Validate proposal block
-	// TODO(validate the block)
 	err := cs.blockExec.ValidateBlock(cs.state, cs.ProposalBlock)
 	if err != nil {
 		// ProposalBlock is invalid, prevote nil.
@@ -1577,6 +1576,7 @@ func (cs *ConsensusState) defaultSetProposal(proposal *Proposal) error {
 
 	// proposal.Signature = p.Signature
 	cs.Proposal = proposal
+	cs.ProposalBlock = proposal.Block
 	log.Info("received proposal", "proposal", proposal)
 	return nil
 }

@@ -38,6 +38,7 @@ type Proposal struct {
 	BlockID     common.Hash `json:"block_id"`
 	TimestampMs int64       `json:"timestamp"` // unix ms
 	Signature   []byte      `json:"signature"`
+	Block       *Block
 }
 
 // NewProposal returns a new Proposal.
