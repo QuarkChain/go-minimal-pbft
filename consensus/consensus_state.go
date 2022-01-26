@@ -832,14 +832,12 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 	case *ProposalMessage:
 		// will not cause transition.
 		// once proposal is set, we can receive block parts
-		// TODO(metahub)
-		// err = cs.setProposal(msg.Proposal)
+		err = cs.setProposal(msg.Proposal)
 
 	case *VoteMessage:
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		// TODO: deseralized message to vote
-		added, err = cs.tryAddVote(ctx, &Vote{}, string(peerID))
+		added, err = cs.tryAddVote(ctx, msg.Vote, string(peerID))
 		if added {
 			select {
 			case cs.statsMsgQueue <- mi:
