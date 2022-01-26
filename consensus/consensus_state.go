@@ -122,6 +122,18 @@ type ConsensusConfig struct {
 	DoubleSignCheckHeight uint64 `mapstructure:"double-sign-check-height"`
 }
 
+func NewDefaultConsesusConfig() *ConsensusConfig {
+	return &ConsensusConfig{
+		TimeoutPropose:        3 * time.Second,
+		TimeoutProposeDelta:   500 * time.Millisecond,
+		TimeoutPrevote:        1 * time.Second,
+		TimeoutPrevoteDelta:   500 * time.Millisecond,
+		TimeoutPrecommit:      1 * time.Second,
+		TimeoutPrecommitDelta: 500 * time.Millisecond,
+		TimeoutCommit:         5 * time.Second,
+	}
+}
+
 // Propose returns the amount of time to wait for a proposal
 func (cfg *ConsensusConfig) Propose(round int32) time.Duration {
 	return time.Duration(
@@ -236,7 +248,7 @@ func (state ChainState) Copy() ChainState {
 // It processes votes and proposals, and upon reaching agreement,
 // commits blocks to the chain and executes them against the application.
 // The internal state machine receives input from peers, the internal validator, and from a timer.
-type SimpleState struct {
+type ConsensusState struct {
 	// service.BaseService
 
 	// config details
@@ -299,7 +311,7 @@ type SimpleState struct {
 }
 
 // NewState returns a new State.
-func NewSimpleState(
+func NewConsensusState(
 	ctx context.Context,
 	cfg *ConsensusConfig,
 	state ChainState,
@@ -308,8 +320,8 @@ func NewSimpleState(
 	// txNotifier txNotifier,
 	// evpool evidencePool,
 	// options ...StateOption,
-) *SimpleState {
-	cs := &SimpleState{
+) *ConsensusState {
+	cs := &ConsensusState{
 		config:           cfg,
 		blockExec:        blockExec,
 		blockStore:       blockStore,
@@ -342,7 +354,7 @@ func NewSimpleState(
 }
 
 // String returns a string.
-func (cs *SimpleState) String() string {
+func (cs *ConsensusState) String() string {
 	// better not to access shared variables
 	return "ConsensusState"
 }
@@ -356,14 +368,14 @@ func (cs *SimpleState) String() string {
 
 // GetLastHeight returns the last height committed.
 // If there were no blocks, returns 0.
-func (cs *SimpleState) GetLastHeight() uint64 {
+func (cs *ConsensusState) GetLastHeight() uint64 {
 	cs.mtx.RLock()
 	defer cs.mtx.RUnlock()
 	return cs.RoundState.Height - 1
 }
 
 // GetRoundState returns a shallow copy of the internal consensus state.
-func (cs *SimpleState) GetRoundState() *RoundState {
+func (cs *ConsensusState) GetRoundState() *RoundState {
 	cs.mtx.RLock()
 	defer cs.mtx.RUnlock()
 
@@ -390,7 +402,7 @@ func (cs *SimpleState) GetRoundState() *RoundState {
 
 // SetPrivValidator sets the private validator account for signing votes. It
 // immediately requests pubkey and caches it.
-func (cs *SimpleState) SetPrivValidator(priv PrivValidator) {
+func (cs *ConsensusState) SetPrivValidator(priv PrivValidator) {
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
 
@@ -408,14 +420,14 @@ func (cs *SimpleState) SetPrivValidator(priv PrivValidator) {
 
 // SetTimeoutTicker sets the local timer. It may be useful to overwrite for
 // testing.
-func (cs *SimpleState) SetTimeoutTicker(timeoutTicker TimeoutTicker) {
+func (cs *ConsensusState) SetTimeoutTicker(timeoutTicker TimeoutTicker) {
 	cs.mtx.Lock()
 	cs.timeoutTicker = timeoutTicker
 	cs.mtx.Unlock()
 }
 
 // LoadCommit loads the commit for a given height.
-func (cs *SimpleState) LoadCommit(height uint64) *Commit {
+func (cs *ConsensusState) LoadCommit(height uint64) *Commit {
 	cs.mtx.RLock()
 	defer cs.mtx.RUnlock()
 
@@ -435,7 +447,7 @@ func (cs *SimpleState) LoadCommit(height uint64) *Commit {
 
 // OnStart loads the latest state via the WAL, and starts the timeout and
 // receive routines.
-func (cs *SimpleState) OnStart(ctx context.Context) error {
+func (cs *ConsensusState) OnStart(ctx context.Context) error {
 	// // We may set the WAL in testing before calling Start, so only OpenWAL if its
 	// // still the nilWAL.
 	// if _, ok := cs.wal.(nilWAL); ok {
@@ -525,7 +537,7 @@ func (cs *SimpleState) OnStart(ctx context.Context) error {
 // receiveRoutine: serializes processing of proposoals, block parts, votes; coordinates state transitions
 //
 // this is only used in tests.
-func (cs *SimpleState) startRoutines(ctx context.Context, maxSteps int) {
+func (cs *ConsensusState) startRoutines(ctx context.Context, maxSteps int) {
 	err := cs.timeoutTicker.Start(ctx)
 	if err != nil {
 		log.Error("failed to start timeout ticker", "err", err)
@@ -548,7 +560,7 @@ func (cs *SimpleState) startRoutines(ctx context.Context, maxSteps int) {
 // }
 
 // OnStop implements service.Service.
-func (cs *SimpleState) OnStop() {
+func (cs *ConsensusState) OnStop() {
 	// If the node is committing a new block, wait until it is finished!
 	if cs.GetRoundState().Step == RoundStepCommit {
 		select {
@@ -573,7 +585,7 @@ func (cs *SimpleState) OnStop() {
 // Wait waits for the the main routine to return.
 // NOTE: be sure to Stop() the event switch and drain
 // any event channels or this may deadlock
-func (cs *SimpleState) Wait() {
+func (cs *ConsensusState) Wait() {
 	<-cs.done
 }
 
@@ -602,7 +614,7 @@ func (cs *SimpleState) Wait() {
 // TODO: should these return anything or let callers just use events?
 
 // AddVote inputs a vote.
-func (cs *SimpleState) AddVote(ctx context.Context, vote *Vote, peerID string) error {
+func (cs *ConsensusState) AddVote(ctx context.Context, vote *Vote, peerID string) error {
 	if peerID == "" {
 		select {
 		case <-ctx.Done():
@@ -625,7 +637,7 @@ func (cs *SimpleState) AddVote(ctx context.Context, vote *Vote, peerID string) e
 }
 
 // SetProposal inputs a proposal.
-func (cs *SimpleState) SetProposal(ctx context.Context, proposal *Proposal, peerID string) error {
+func (cs *ConsensusState) SetProposal(ctx context.Context, proposal *Proposal, peerID string) error {
 
 	if peerID == "" {
 		select {
@@ -647,7 +659,7 @@ func (cs *SimpleState) SetProposal(ctx context.Context, proposal *Proposal, peer
 }
 
 // SetProposalAndBlock inputs the proposal.  Use in test only.
-func (cs *SimpleState) SetProposalAndBlock(
+func (cs *ConsensusState) SetProposalAndBlock(
 	ctx context.Context,
 	proposal *Proposal,
 	// block *types.Block,
@@ -666,30 +678,30 @@ func (cs *SimpleState) SetProposalAndBlock(
 //------------------------------------------------------------
 // internal functions for managing the state
 
-func (cs *SimpleState) updateHeight(height uint64) {
+func (cs *ConsensusState) updateHeight(height uint64) {
 	cs.Height = height
 }
 
-func (cs *SimpleState) updateRoundStep(round int32, step RoundStepType) {
+func (cs *ConsensusState) updateRoundStep(round int32, step RoundStepType) {
 	cs.Round = round
 	cs.Step = step
 }
 
 // enterNewRound(height, 0) at cs.StartTime.
-func (cs *SimpleState) scheduleRound0(rs *RoundState) {
+func (cs *ConsensusState) scheduleRound0(rs *RoundState) {
 	// log.Info("scheduleRound0", "now", tmtime.Now(), "startTime", cs.StartTime)
 	sleepDuration := rs.StartTime.Sub(tmtime.Now())
 	cs.scheduleTimeout(sleepDuration, rs.Height, 0, RoundStepNewHeight)
 }
 
 // Attempt to schedule a timeout (by sending timeoutInfo on the tickChan)
-func (cs *SimpleState) scheduleTimeout(duration time.Duration, height uint64, round int32, step RoundStepType) {
+func (cs *ConsensusState) scheduleTimeout(duration time.Duration, height uint64, round int32, step RoundStepType) {
 	// TODO(metahub): enable timeout
 	// cs.timeoutTicker.ScheduleTimeout(timeoutInfo{duration, height, round, step})
 }
 
 // send a msg into the receiveRoutine regarding our own proposal, block part, or vote
-func (cs *SimpleState) sendInternalMessage(ctx context.Context, mi MsgInfo) {
+func (cs *ConsensusState) sendInternalMessage(ctx context.Context, mi MsgInfo) {
 	select {
 	case <-ctx.Done():
 	case cs.internalMsgQueue <- mi:
@@ -710,7 +722,7 @@ func (cs *SimpleState) sendInternalMessage(ctx context.Context, mi MsgInfo) {
 
 // Reconstruct LastCommit from SeenCommit, which we saved along with the block,
 // (which happens even before saving the state)
-func (cs *SimpleState) reconstructLastCommit(state ChainState) {
+func (cs *ConsensusState) reconstructLastCommit(state ChainState) {
 	commit := cs.blockStore.LoadSeenCommit()
 	if commit == nil || commit.Height != state.LastBlockHeight {
 		commit = cs.blockStore.LoadBlockCommit(state.LastBlockHeight)
@@ -735,7 +747,7 @@ func (cs *SimpleState) reconstructLastCommit(state ChainState) {
 
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes RoundStepNewHeight.
-func (cs *SimpleState) updateToState(ctx context.Context, state ChainState) {
+func (cs *ConsensusState) updateToState(ctx context.Context, state ChainState) {
 	if cs.CommitRound > -1 && 0 < cs.Height && cs.Height != state.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"updateToState() expected state height of %v but found %v",
@@ -841,7 +853,7 @@ func (cs *SimpleState) updateToState(ctx context.Context, state ChainState) {
 	cs.newStep(ctx)
 }
 
-func (cs *SimpleState) newStep(ctx context.Context) {
+func (cs *ConsensusState) newStep(ctx context.Context) {
 	// rs := cs.RoundStateEvent()
 	// if err := cs.wal.Write(rs); err != nil {
 	// 	log.Error("failed writing to WAL", "err", err)
@@ -858,8 +870,8 @@ func (cs *SimpleState) newStep(ctx context.Context) {
 // It keeps the RoundState and is the only thing that updates it.
 // Updates (state transitions) happen on timeouts, complete proposals, and 2/3 majorities.
 // State must be locked before any internal state is updated.
-func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
-	onExit := func(cs *SimpleState) {
+func (cs *ConsensusState) receiveRoutine(ctx context.Context, maxSteps int) {
+	onExit := func(cs *ConsensusState) {
 		// NOTE: the internalMsgQueue may have signed messages from our
 		// priv_val that haven't hit the WAL, but its ok because
 		// priv_val tracks LastSig
@@ -952,7 +964,7 @@ func (cs *SimpleState) receiveRoutine(ctx context.Context, maxSteps int) {
 }
 
 // state transitions on complete-proposal, 2/3-any, 2/3-one
-func (cs *SimpleState) handleMsg(ctx context.Context, mi MsgInfo) {
+func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
 
@@ -1015,7 +1027,7 @@ func (cs *SimpleState) handleMsg(ctx context.Context, mi MsgInfo) {
 	}
 }
 
-func (cs *SimpleState) handleTimeout(
+func (cs *ConsensusState) handleTimeout(
 	ctx context.Context,
 	ti timeoutInfo,
 	rs RoundState,
@@ -1067,7 +1079,7 @@ func (cs *SimpleState) handleTimeout(
 // Enter: +2/3 precommits for nil at (height,round-1)
 // Enter: +2/3 prevotes any or +2/3 precommits for block or any from (height, round)
 // NOTE: cs.StartTime was already set for height.
-func (cs *SimpleState) enterNewRound(ctx context.Context, height uint64, round int32) {
+func (cs *ConsensusState) enterNewRound(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cs.Step != RoundStepNewHeight) {
 		log.Debug(
 			"entering new round with invalid args",
@@ -1115,7 +1127,7 @@ func (cs *SimpleState) enterNewRound(ctx context.Context, height uint64, round i
 // Enter (CreateEmptyBlocks, CreateEmptyBlocksInterval > 0 ):
 //		after enterNewRound(height,round), after timeout of CreateEmptyBlocksInterval
 // Enter (!CreateEmptyBlocks) : after enterNewRound(height,round), once txs are in the mempool
-func (cs *SimpleState) enterPropose(ctx context.Context, height uint64, round int32) {
+func (cs *ConsensusState) enterPropose(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPropose <= cs.Step) {
 		log.Debug(
 			"entering propose step with invalid args",
@@ -1183,11 +1195,11 @@ func (cs *SimpleState) enterPropose(ctx context.Context, height uint64, round in
 	}
 }
 
-func (cs *SimpleState) isProposer(address common.Address) bool {
+func (cs *ConsensusState) isProposer(address common.Address) bool {
 	return cs.Validators.GetProposer().Address == address
 }
 
-func (cs *SimpleState) defaultDecideProposal(height uint64, round int32) {
+func (cs *ConsensusState) defaultDecideProposal(height uint64, round int32) {
 	var block *Block
 
 	// Decide on block
@@ -1231,7 +1243,7 @@ func (cs *SimpleState) defaultDecideProposal(height uint64, round int32) {
 
 // Returns true if the proposal block is complete &&
 // (if POLRound was proposed, we have +2/3 prevotes from there).
-func (cs *SimpleState) isProposalComplete() bool {
+func (cs *ConsensusState) isProposalComplete() bool {
 	if cs.Proposal == nil || cs.ProposalBlock == nil {
 		return false
 	}
@@ -1252,7 +1264,7 @@ func (cs *SimpleState) isProposalComplete() bool {
 //
 // NOTE: keep it side-effect free for clarity.
 // CONTRACT: cs.privValidator is not nil.
-func (cs *SimpleState) createProposalBlock() (block *Block) {
+func (cs *ConsensusState) createProposalBlock() (block *Block) {
 	if cs.privValidator == nil {
 		panic("entered createProposalBlock with privValidator being nil")
 	}
@@ -1289,7 +1301,7 @@ func (cs *SimpleState) createProposalBlock() (block *Block) {
 // Enter: proposal block and POL is ready.
 // Prevote for LockedBlock if we're locked, or ProposalBlock if valid.
 // Otherwise vote nil.
-func (cs *SimpleState) enterPrevote(ctx context.Context, height uint64, round int32) {
+func (cs *ConsensusState) enterPrevote(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrevote <= cs.Step) {
 		log.Debug(
 			"entering prevote step with invalid args",
@@ -1314,7 +1326,7 @@ func (cs *SimpleState) enterPrevote(ctx context.Context, height uint64, round in
 	// (so we have more time to try and collect +2/3 prevotes for a single block)
 }
 
-func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height uint64, round int32) {
+func (cs *ConsensusState) defaultDoPrevote(ctx context.Context, height uint64, round int32) {
 	// If a block is locked, prevote that.
 	if cs.LockedBlock != nil {
 		log.Debug("prevote step; already locked on a block; prevoting locked block", "height", height, "round", round)
@@ -1347,7 +1359,7 @@ func (cs *SimpleState) defaultDoPrevote(ctx context.Context, height uint64, roun
 }
 
 // Enter: any +2/3 prevotes at next round.
-func (cs *SimpleState) enterPrevoteWait(ctx context.Context, height uint64, round int32) {
+func (cs *ConsensusState) enterPrevoteWait(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrevoteWait <= cs.Step) {
 		log.Debug(
 			"entering prevote wait step with invalid args",
@@ -1382,7 +1394,7 @@ func (cs *SimpleState) enterPrevoteWait(ctx context.Context, height uint64, roun
 // Lock & precommit the ProposalBlock if we have enough prevotes for it (a POL in this round)
 // else, unlock an existing lock and precommit nil if +2/3 of prevotes were nil,
 // else, precommit nil otherwise.
-func (cs *SimpleState) enterPrecommit(ctx context.Context, height uint64, round int32) {
+func (cs *ConsensusState) enterPrecommit(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && RoundStepPrecommit <= cs.Step) {
 		log.Debug(
 			"entering precommit step with invalid args",
@@ -1474,7 +1486,7 @@ func (cs *SimpleState) enterPrecommit(ctx context.Context, height uint64, round 
 }
 
 // Enter: any +2/3 precommits for next round.
-func (cs *SimpleState) enterPrecommitWait(ctx context.Context, height uint64, round int32) {
+func (cs *ConsensusState) enterPrecommitWait(ctx context.Context, height uint64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cs.TriggeredTimeoutPrecommit) {
 		log.Debug(
 			"entering precommit wait step with invalid args",
@@ -1505,7 +1517,7 @@ func (cs *SimpleState) enterPrecommitWait(ctx context.Context, height uint64, ro
 }
 
 // Enter: +2/3 precommits for block
-func (cs *SimpleState) enterCommit(ctx context.Context, height uint64, commitRound int32) {
+func (cs *ConsensusState) enterCommit(ctx context.Context, height uint64, commitRound int32) {
 	if cs.Height != height || RoundStepCommit <= cs.Step {
 		log.Debug(
 			"entering commit step with invalid args",
@@ -1558,7 +1570,7 @@ func (cs *SimpleState) enterCommit(ctx context.Context, height uint64, commitRou
 }
 
 // If we have the block AND +2/3 commits for it, finalize.
-func (cs *SimpleState) tryFinalizeCommit(ctx context.Context, height uint64) {
+func (cs *ConsensusState) tryFinalizeCommit(ctx context.Context, height uint64) {
 	if cs.Height != height {
 		panic(fmt.Sprintf("tryFinalizeCommit() cs.Height: %v vs height: %v", cs.Height, height))
 	}
@@ -1585,7 +1597,7 @@ func (cs *SimpleState) tryFinalizeCommit(ctx context.Context, height uint64) {
 }
 
 // Increment height and goto RoundStepNewHeight
-func (cs *SimpleState) finalizeCommit(ctx context.Context, height uint64) {
+func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 	if cs.Height != height || cs.Step != RoundStepCommit {
 		log.Debug(
 			"entering finalize commit step",
@@ -1693,7 +1705,7 @@ func (cs *SimpleState) finalizeCommit(ctx context.Context, height uint64) {
 
 //-----------------------------------------------------------------------------
 
-func (cs *SimpleState) defaultSetProposal(proposal *Proposal) error {
+func (cs *ConsensusState) defaultSetProposal(proposal *Proposal) error {
 	// Already have one
 	// TODO: possibly catch double proposals
 	if cs.Proposal != nil {
@@ -1723,7 +1735,7 @@ func (cs *SimpleState) defaultSetProposal(proposal *Proposal) error {
 }
 
 // Attempt to add the vote. if its a duplicate signature, dupeout the validator
-func (cs *SimpleState) tryAddVote(ctx context.Context, vote *Vote, peerID string) (bool, error) {
+func (cs *ConsensusState) tryAddVote(ctx context.Context, vote *Vote, peerID string) (bool, error) {
 	added, err := cs.addVote(ctx, vote, peerID)
 	if err != nil {
 		// If the vote height is off, we'll just ignore it,
@@ -1771,7 +1783,7 @@ func (cs *SimpleState) tryAddVote(ctx context.Context, vote *Vote, peerID string
 	return added, nil
 }
 
-func (cs *SimpleState) addVote(
+func (cs *ConsensusState) addVote(
 	ctx context.Context,
 	vote *Vote,
 	peerID string,
@@ -1923,7 +1935,7 @@ func (cs *SimpleState) addVote(
 }
 
 // CONTRACT: cs.privValidator is not nil.
-func (cs *SimpleState) signVote(
+func (cs *ConsensusState) signVote(
 	msgType SignedMsgType,
 	blockID common.Hash,
 ) (*Vote, error) {
@@ -1980,7 +1992,7 @@ func (cs *SimpleState) signVote(
 // It ensures that for a prior block with a BFT-timestamp of T,
 // any vote from this validator will have time at least time T + 1ms.
 // This is needed, as monotonicity of time is a guarantee that BFT time provides.
-func (cs *SimpleState) voteTime() uint64 {
+func (cs *ConsensusState) voteTime() uint64 {
 	now := uint64(tmtime.Now().UnixMilli())
 	minVoteTime := now
 	// Minimum time increment between blocks
@@ -2001,7 +2013,7 @@ func (cs *SimpleState) voteTime() uint64 {
 }
 
 // sign the vote and publish on internalMsgQueue
-func (cs *SimpleState) signAddVote(ctx context.Context, msgType SignedMsgType, blockID common.Hash) *Vote {
+func (cs *ConsensusState) signAddVote(ctx context.Context, msgType SignedMsgType, blockID common.Hash) *Vote {
 	if cs.privValidator == nil { // the node does not have a key
 		return nil
 	}
@@ -2033,7 +2045,7 @@ func (cs *SimpleState) signAddVote(ctx context.Context, msgType SignedMsgType, b
 // updatePrivValidatorPubKey get's the private validator public key and
 // memoizes it. This func returns an error if the private validator is not
 // responding or responds with an error.
-func (cs *SimpleState) updatePrivValidatorPubKey() error {
+func (cs *ConsensusState) updatePrivValidatorPubKey() error {
 	if cs.privValidator == nil {
 		return nil
 	}
@@ -2063,7 +2075,7 @@ func (cs *SimpleState) updatePrivValidatorPubKey() error {
 }
 
 // look back to check existence of the node's consensus votes before joining consensus
-func (cs *SimpleState) checkDoubleSigningRisk(height uint64) error {
+func (cs *ConsensusState) checkDoubleSigningRisk(height uint64) error {
 	if cs.privValidator != nil && cs.privValidatorPubKey != nil && cs.config.DoubleSignCheckHeight > 0 && height > 0 {
 		valAddr := cs.privValidatorPubKey.Address()
 		doubleSignCheckHeight := cs.config.DoubleSignCheckHeight
