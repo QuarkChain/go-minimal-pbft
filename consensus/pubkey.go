@@ -17,6 +17,10 @@ type EcdsaPubKey struct {
 	address common.Address
 }
 
+func NewEcdsaPubKey(addr common.Address) PubKey {
+	return &EcdsaPubKey{address: addr}
+}
+
 func (pubkey *EcdsaPubKey) Type() string {
 	return "ECDSA_PUBKEY"
 }

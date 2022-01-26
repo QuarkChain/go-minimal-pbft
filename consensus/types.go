@@ -195,3 +195,25 @@ func (cs CommitSig) ValidateBasic() error {
 
 	return nil
 }
+
+// Absent returns true if CommitSig is absent.
+func (cs CommitSig) Absent() bool {
+	return cs.BlockIDFlag == BlockIDFlagAbsent
+}
+
+// BlockID returns the Commit's BlockID if CommitSig indicates signing,
+// otherwise - empty BlockID.
+func (cs CommitSig) BlockID(commitBlockID common.Hash) common.Hash {
+	var blockID common.Hash
+	switch cs.BlockIDFlag {
+	case BlockIDFlagAbsent:
+		blockID = common.Hash{}
+	case BlockIDFlagCommit:
+		blockID = commitBlockID
+	case BlockIDFlagNil:
+		blockID = common.Hash{}
+	default:
+		panic(fmt.Sprintf("Unknown BlockIDFlag: %v", cs.BlockIDFlag))
+	}
+	return blockID
+}

@@ -84,28 +84,6 @@ type BlockExecutor interface {
 	ApplyBlock(context.Context, ChainState, *Block) (ChainState, error) // apply the block
 }
 
-// Absent returns true if CommitSig is absent.
-func (cs CommitSig) Absent() bool {
-	return cs.BlockIDFlag == BlockIDFlagAbsent
-}
-
-// BlockID returns the Commit's BlockID if CommitSig indicates signing,
-// otherwise - empty BlockID.
-func (cs CommitSig) BlockID(commitBlockID common.Hash) common.Hash {
-	var blockID common.Hash
-	switch cs.BlockIDFlag {
-	case BlockIDFlagAbsent:
-		blockID = common.Hash{}
-	case BlockIDFlagCommit:
-		blockID = commitBlockID
-	case BlockIDFlagNil:
-		blockID = common.Hash{}
-	default:
-		panic(fmt.Sprintf("Unknown BlockIDFlag: %v", cs.BlockIDFlag))
-	}
-	return blockID
-}
-
 // Consensus sentinel errors
 var (
 	ErrInvalidProposalSignature   = errors.New("error invalid proposal signature")
@@ -117,55 +95,6 @@ var (
 )
 
 var msgQueueSize = 1000
-
-// State is a short description of the latest committed block of the Tendermint consensus.
-// It keeps all information necessary to validate new blocks,
-// including the last validator set and the consensus params.
-// All fields are exposed so the struct can be easily serialized,
-// but none of them should be mutated directly.
-// Instead, use state.Copy() or updateState(...).
-// NOTE: not goroutine-safe.
-type ChainState struct {
-	// immutable
-	ChainID       string
-	InitialHeight uint64 // should be 1, not 0, when starting from height 1
-
-	// LastBlockHeight=0 at genesis (ie. block(H=0) does not exist)
-	LastBlockHeight uint64
-	LastBlockID     common.Hash
-	LastBlockTime   uint64
-
-	// LastValidators is used to validate block.LastCommit.
-	// Validators are persisted to the database separately every time they change,
-	// so we can query for historical validator sets.
-	// Note that if s.LastBlockHeight causes a valset change,
-	// we set s.LastHeightValidatorsChanged = s.LastBlockHeight + 1 + 1
-	// Extra +1 due to nextValSet delay.
-	NextValidators              *ValidatorSet
-	Validators                  *ValidatorSet
-	LastValidators              *ValidatorSet
-	LastHeightValidatorsChanged int64
-
-	// Consensus parameters used for validating blocks.
-	// Changes returned by EndBlock and updated after Commit.
-	// ConsensusParams                  types.ConsensusParams
-	// LastHeightConsensusParamsChanged int64
-
-	// Merkle root of the results from executing prev block
-	// LastResultsHash []byte
-
-	// the latest AppHash we've received from calling abci.Commit()
-	AppHash []byte
-}
-
-// IsEmpty returns true if the State is equal to the empty State.
-func (state ChainState) IsEmpty() bool {
-	return state.Validators == nil // XXX can't compare to Empty
-}
-
-func (state ChainState) Copy() ChainState {
-	return ChainState{}
-}
 
 // State handles execution of the consensus algorithm.
 // It processes votes and proposals, and upon reaching agreement,
@@ -1574,7 +1503,6 @@ func (cs *ConsensusState) defaultSetProposal(proposal *Proposal) error {
 		return ErrInvalidProposalSignature
 	}
 
-	// proposal.Signature = p.Signature
 	cs.Proposal = proposal
 	cs.ProposalBlock = proposal.Block
 	log.Info("received proposal", "proposal", proposal)

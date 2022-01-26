@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-minimal-pbft/consensus"
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -151,6 +152,69 @@ func weightedMedian(weightedTimes []*weightedTime, totalVotingPower int64) (res 
 	return
 }
 
-func (be *DefaultBlockExecutor) ApplyBlock(ctx context.Context, state consensus.ChainState, b *consensus.Block) (consensus.ChainState, error) {
+func (be *DefaultBlockExecutor) ApplyBlock(ctx context.Context, state consensus.ChainState, block *consensus.Block) (consensus.ChainState, error) {
+	// TOOD: execute the block & new validator change
+	// Update the state with the block and responses.
+	state, err := updateState(state, block.Hash(), &block.Header)
+	if err != nil {
+		return state, fmt.Errorf("commit failed for application: %v", err)
+	}
+
 	return state, nil
+}
+
+func updateState(
+	state consensus.ChainState,
+	blockID common.Hash,
+	header *consensus.Header,
+) (consensus.ChainState, error) {
+
+	// Copy the valset so we can apply changes from EndBlock
+	// and update s.LastValidators and s.Validators.
+	nValSet := state.NextValidators.Copy()
+
+	// // Update the validator set with the latest abciResponses.
+	// lastHeightValsChanged := state.LastHeightValidatorsChanged
+	// if len(validatorUpdates) > 0 {
+	// 	err := nValSet.UpdateWithChangeSet(validatorUpdates)
+	// 	if err != nil {
+	// 		return state, fmt.Errorf("error changing validator set: %v", err)
+	// 	}
+	// 	// Change results from this height but only applies to the next next height.
+	// 	lastHeightValsChanged = header.Height + 1 + 1
+	// }
+
+	// Update validator proposer priority and set state variables.
+	nValSet.IncrementProposerPriority(1)
+
+	// Update the params with the latest abciResponses.
+	// nextParams := state.ConsensusParams
+	// lastHeightParamsChanged := state.LastHeightConsensusParamsChanged
+	// if abciResponses.EndBlock.ConsensusParamUpdates != nil {
+	// 	// NOTE: must not mutate s.ConsensusParams
+	// 	nextParams = state.ConsensusParams.UpdateConsensusParams(abciResponses.EndBlock.ConsensusParamUpdates)
+	// 	err := nextParams.ValidateConsensusParams()
+	// 	if err != nil {
+	// 		return state, fmt.Errorf("error updating consensus params: %v", err)
+	// 	}
+
+	// 	state.Version.Consensus.App = nextParams.Version.AppVersion
+
+	// 	// Change results from this height but only applies to the next height.
+	// 	lastHeightParamsChanged = header.Height + 1
+	// }
+
+	// NOTE: the AppHash has not been populated.
+	// It will be filled on state.Save.
+	return consensus.ChainState{
+		ChainID:         state.ChainID,
+		InitialHeight:   state.InitialHeight,
+		LastBlockHeight: header.Height,
+		LastBlockID:     blockID,
+		LastBlockTime:   header.TimeMs,
+		NextValidators:  nValSet,
+		Validators:      state.NextValidators.Copy(),
+		LastValidators:  state.Validators.Copy(),
+		AppHash:         nil,
+	}, nil
 }
