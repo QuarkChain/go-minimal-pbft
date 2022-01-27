@@ -31,17 +31,17 @@ import (
 var (
 	p2pHeartbeatsSent = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "unibridge_p2p_heartbeats_sent_total",
+			Name: "p2p_heartbeats_sent_total",
 			Help: "Total number of p2p heartbeats sent",
 		})
 	p2pMessagesSent = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "unibridge_p2p_broadcast_messages_sent_total",
+			Name: "p2p_broadcast_messages_sent_total",
 			Help: "Total number of p2p pubsub broadcast messages sent",
 		})
 	p2pMessagesReceived = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "unibridge_p2p_broadcast_messages_received_total",
+			Name: "p2p_broadcast_messages_received_total",
 			Help: "Total number of p2p pubsub broadcast messages received",
 		}, []string{"type"})
 	decoder = make(map[byte]func([]byte) (interface{}, error))
@@ -370,8 +370,11 @@ func Run(obsvC chan consensus.MsgInfo,
 				"from", envelope.GetFrom().String())
 
 			switch m := msg.(type) {
-			case consensus.MsgInfo:
-				obsvC <- m
+			case *consensus.Proposal:
+				obsvC <- consensus.MsgInfo{Msg: &consensus.ProposalMessage{Proposal: m}, PeerID: string(envelope.GetFrom())}
+				p2pMessagesReceived.WithLabelValues("observation").Inc()
+			case *consensus.Vote:
+				obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{Vote: m}, PeerID: string(envelope.GetFrom())}
 				p2pMessagesReceived.WithLabelValues("observation").Inc()
 			default:
 				p2pMessagesReceived.WithLabelValues("unknown").Inc()

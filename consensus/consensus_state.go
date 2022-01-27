@@ -1265,7 +1265,7 @@ func (cs *ConsensusState) enterPrecommit(ctx context.Context, height uint64, rou
 	}
 
 	// If +2/3 prevoted for proposal block, stage and precommit it
-	if cs.ProposalBlock.Hash() == blockID {
+	if cs.ProposalBlock != nil && cs.ProposalBlock.Hash() == blockID {
 		log.Debug("precommit step; +2/3 prevoted proposal block; locking", "height", height, "round", round, "hash", blockID)
 
 		// Validate the block.
@@ -1667,14 +1667,14 @@ func (cs *ConsensusState) addVote(
 			// Update Valid* if we can.
 			// NOTE: our proposal block may be nil or not what received a polka..
 			if (blockID != common.Hash{}) && (cs.ValidRound < vote.Round) && (vote.Round == cs.Round) {
-				if cs.ProposalBlock.Hash() == blockID {
+				if cs.ProposalBlock != nil && cs.ProposalBlock.Hash() == blockID {
 					log.Debug("updating valid block because of POL", "valid_round", cs.ValidRound, "pol_round", vote.Round)
 					cs.ValidRound = vote.Round
 					cs.ValidBlock = cs.ProposalBlock
 				} else {
 					log.Debug(
 						"valid block we do not know about; set ProposalBlock=nil",
-						"proposal", cs.ProposalBlock.Hash(),
+						"proposal", cs.ProposalBlock,
 						"block_id", blockID,
 					)
 
