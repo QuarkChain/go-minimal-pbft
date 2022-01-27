@@ -570,8 +570,7 @@ func (cs *ConsensusState) updateToState(ctx context.Context, state ChainState) {
 	}
 
 	// Reset fields based on state.
-	// TODO (read validators from state)
-	validators := &ValidatorSet{}
+	validators := state.Validators
 
 	switch {
 	case state.LastBlockHeight == 0: // Very first commit should be empty.
@@ -625,8 +624,7 @@ func (cs *ConsensusState) updateToState(ctx context.Context, state ChainState) {
 	cs.ValidBlock = nil
 	cs.Votes = NewHeightVoteSet(state.ChainID, height, validators)
 	cs.CommitRound = -1
-	// TODO: read from state
-	cs.LastValidators = &ValidatorSet{}
+	cs.LastValidators = state.LastValidators
 	cs.TriggeredTimeoutPrecommit = false
 
 	cs.state = state

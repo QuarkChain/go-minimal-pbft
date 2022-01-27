@@ -6,7 +6,9 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/go-minimal-pbft/consensus"
 	"github.com/go-minimal-pbft/p2p"
@@ -91,6 +93,7 @@ func runNode(cmd *cobra.Command, args []string) {
 	}
 
 	var privVal consensus.PrivValidator
+	var pubVal consensus.PubKey
 
 	if *valKeyPath != "" {
 		valKey, err := loadValidatorKey(*valKeyPath)
@@ -99,16 +102,18 @@ func runNode(cmd *cobra.Command, args []string) {
 			return
 		}
 		privVal = consensus.NewPrivValidatorLocal(valKey)
-		pubVal, err := privVal.GetPubKey(rootCtx)
+		pubVal, err = privVal.GetPubKey(rootCtx)
 		if err != nil {
 			log.Error("Failed to load valiator pub key", "err", err)
 		}
 		log.Info("Running validator", "addr", pubVal.Address())
 	}
 
-	go p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
+	gcs := consensus.MakeGenesisChainState("test", uint64(time.Now().UnixMilli()), []common.Address{pubVal.Address()})
 
-	consensus.NewConsensusState(rootCtx, consensus.NewDefaultConsesusConfig(), consensus.ChainState{}, consensus.NewDefaultBlockExecutor(nil), NewDefaultBlockStore(nil))
+	consensus.NewConsensusState(rootCtx, consensus.NewDefaultConsesusConfig(), *gcs, consensus.NewDefaultBlockExecutor(nil), NewDefaultBlockStore(nil))
+
+	go p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
 
 	// Running the node
 	log.Info("Running the node")
