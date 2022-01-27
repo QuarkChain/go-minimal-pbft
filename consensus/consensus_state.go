@@ -787,7 +787,7 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 		// once proposal is set, we can receive block parts
 		err = cs.setProposal(msg.Proposal)
 
-		if err != nil {
+		if err == nil {
 			// broadcast the proposal to peer
 			cs.broadcastMessageToPeers(ctx, msg)
 		}

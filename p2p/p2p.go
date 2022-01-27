@@ -162,6 +162,25 @@ func decode(data []byte) (interface{}, error) {
 	return decoder[data[0]](data[1:])
 }
 
+func encode(msg interface{}) ([]byte, error) {
+	var data []byte
+	var err error
+	var typeData []byte
+	switch m := msg.(type) {
+	case *consensus.Proposal:
+		typeData = []byte{1}
+		data, err = encodeProposal(m)
+	case *consensus.Vote:
+		typeData = []byte{2}
+		data, err = encodeVote(m)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return append(typeData, data...), nil
+}
+
 func Run(obsvC chan consensus.MsgInfo,
 	sendC chan consensus.Message,
 	priv crypto.PrivKey,
@@ -280,7 +299,7 @@ func Run(obsvC chan consensus.MsgInfo,
 		if successes == 0 && !bootstrapNode {
 			return fmt.Errorf("failed to connect to any bootstrap peer")
 		} else {
-			log.Info("Connected to bootstrap peers", zap.Int("num", successes))
+			log.Info("Connected to bootstrap peers", "num", successes)
 		}
 
 		log.Info("Node has been started", "peer_id", h.ID().String(),
@@ -297,14 +316,14 @@ func Run(obsvC chan consensus.MsgInfo,
 					var err error
 					var data []byte
 					switch m := (msg).(type) {
-					case *consensus.Proposal:
-						data, err = encodeProposal(m)
+					case *consensus.ProposalMessage:
+						data, err = encode(m.Proposal)
 						if err == nil {
 							err = th.Publish(ctx, data)
 							p2pMessagesSent.Inc()
 						}
-					case *consensus.Vote:
-						data, err = encodeVote(m)
+					case *consensus.VoteMessage:
+						data, err = encode(m.Vote)
 						if err == nil {
 							err = th.Publish(ctx, data)
 							p2pMessagesSent.Inc()
@@ -331,23 +350,24 @@ func Run(obsvC chan consensus.MsgInfo,
 
 			if err != nil {
 				log.Info("received invalid message",
-					zap.String("data", string(envelope.Data)),
-					zap.String("from", envelope.GetFrom().String()))
+					"err", err,
+					"data", envelope.Data,
+					"from", envelope.GetFrom().String())
 				p2pMessagesReceived.WithLabelValues("invalid").Inc()
 				continue
 			}
 
 			if envelope.GetFrom() == h.ID() {
 				log.Debug("received message from ourselves, ignoring",
-					zap.Any("payload", msg))
+					"payload", msg)
 				p2pMessagesReceived.WithLabelValues("loopback").Inc()
 				continue
 			}
 
 			log.Debug("received message",
-				zap.Any("payload", msg),
-				zap.Binary("raw", envelope.Data),
-				zap.String("from", envelope.GetFrom().String()))
+				"payload", msg,
+				"raw", envelope.Data,
+				"from", envelope.GetFrom().String())
 
 			switch m := msg.(type) {
 			case consensus.MsgInfo:
@@ -356,9 +376,9 @@ func Run(obsvC chan consensus.MsgInfo,
 			default:
 				p2pMessagesReceived.WithLabelValues("unknown").Inc()
 				log.Warn("received unknown message type (running outdated software?)",
-					zap.Any("payload", msg),
-					zap.Binary("raw", envelope.Data),
-					zap.String("from", envelope.GetFrom().String()))
+					"payload", msg,
+					"raw", envelope.Data,
+					"from", envelope.GetFrom().String())
 			}
 		}
 	}
