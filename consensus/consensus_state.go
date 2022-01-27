@@ -128,9 +128,10 @@ type ConsensusState struct {
 
 	// state changes may be triggered by: msgs from peers,
 	// msgs from ourself, or by timeouts
-	peerMsgQueue     chan MsgInfo
+	peerInMsgQueue   chan MsgInfo
 	internalMsgQueue chan MsgInfo
 	timeoutTicker    TimeoutTicker
+	peerOutMsgQueue  chan Message
 
 	// information about about added votes and block parts are written on this channel
 	// so statistics can be computed by reactor
@@ -169,6 +170,8 @@ func NewConsensusState(
 	state ChainState,
 	blockExec BlockExecutor,
 	blockStore BlockStore,
+	peerInMsgQueue chan MsgInfo,
+	peerOutMsgQueue chan Message,
 	// txNotifier txNotifier,
 	// evpool evidencePool,
 	// options ...StateOption,
@@ -177,7 +180,8 @@ func NewConsensusState(
 		config:           cfg,
 		blockExec:        blockExec,
 		blockStore:       blockStore,
-		peerMsgQueue:     make(chan MsgInfo, msgQueueSize),
+		peerInMsgQueue:   peerInMsgQueue,
+		peerOutMsgQueue:  peerOutMsgQueue,
 		internalMsgQueue: make(chan MsgInfo, msgQueueSize),
 		timeoutTicker:    NewTimeoutTicker(),
 		statsMsgQueue:    make(chan MsgInfo, msgQueueSize),
@@ -509,6 +513,21 @@ func (cs *ConsensusState) sendInternalMessage(ctx context.Context, mi MsgInfo) {
 	}
 }
 
+func (cs *ConsensusState) broadcastMessageToPeers(ctx context.Context, msg Message) {
+	select {
+	case <-ctx.Done():
+	case cs.peerOutMsgQueue <- msg:
+	default:
+		log.Debug("broadcast msg queue is full; using a go-routine")
+		go func() {
+			select {
+			case <-ctx.Done():
+			case cs.peerOutMsgQueue <- msg:
+			}
+		}()
+	}
+}
+
 // Reconstruct LastCommit from SeenCommit, which we saved along with the block,
 // (which happens even before saving the state)
 func (cs *ConsensusState) reconstructLastCommit(state ChainState) {
@@ -703,7 +722,7 @@ func (cs *ConsensusState) receiveRoutine(ctx context.Context, maxSteps int) {
 
 		select {
 
-		case mi = <-cs.peerMsgQueue:
+		case mi = <-cs.peerInMsgQueue:
 			// if err := cs.wal.Write(mi); err != nil {
 			// 	log.Error("failed writing to WAL", "err", err)
 			// }
@@ -768,6 +787,11 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 		// once proposal is set, we can receive block parts
 		err = cs.setProposal(msg.Proposal)
 
+		if err != nil {
+			// broadcast the proposal to peer
+			cs.broadcastMessageToPeers(ctx, msg)
+		}
+
 	case *VoteMessage:
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
@@ -778,6 +802,8 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 			case <-ctx.Done():
 				return
 			}
+			// broadcast the vote to peer
+			cs.broadcastMessageToPeers(ctx, msg)
 		}
 
 		// if err == ErrAddingVote {

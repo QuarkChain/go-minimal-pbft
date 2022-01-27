@@ -162,8 +162,8 @@ func decode(data []byte) (interface{}, error) {
 	return decoder[data[0]](data[1:])
 }
 
-func Run(obsvC chan *consensus.MsgInfo,
-	sendC chan *consensus.Message,
+func Run(obsvC chan consensus.MsgInfo,
+	sendC chan consensus.Message,
 	priv crypto.PrivKey,
 	port uint,
 	networkID string,
@@ -296,7 +296,7 @@ func Run(obsvC chan *consensus.MsgInfo,
 				case msg := <-sendC:
 					var err error
 					var data []byte
-					switch m := (*msg).(type) {
+					switch m := (msg).(type) {
 					case *consensus.Proposal:
 						data, err = encodeProposal(m)
 						if err == nil {
@@ -350,7 +350,7 @@ func Run(obsvC chan *consensus.MsgInfo,
 				zap.String("from", envelope.GetFrom().String()))
 
 			switch m := msg.(type) {
-			case *consensus.MsgInfo:
+			case consensus.MsgInfo:
 				obsvC <- m
 				p2pMessagesReceived.WithLabelValues("observation").Inc()
 			default:

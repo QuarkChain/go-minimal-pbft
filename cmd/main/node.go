@@ -79,10 +79,10 @@ func runNode(cmd *cobra.Command, args []string) {
 	defer rootCtxCancel()
 
 	// Outbound gossip message queue
-	sendC := make(chan *consensus.Message)
+	sendC := make(chan consensus.Message, 1000)
 
 	// Inbound observations
-	obsvC := make(chan *consensus.MsgInfo, 50)
+	obsvC := make(chan consensus.MsgInfo, 1000)
 
 	// Load p2p private key
 	var p2pPriv p2pcrypto.PrivKey
@@ -142,7 +142,16 @@ func runNode(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	consensusState := consensus.NewConsensusState(rootCtx, consensus.NewDefaultConsesusConfig(), *gcs, consensus.NewDefaultBlockExecutor(db), NewDefaultBlockStore(db))
+	consensusState := consensus.NewConsensusState(
+		rootCtx,
+		consensus.NewDefaultConsesusConfig(),
+		*gcs,
+		consensus.NewDefaultBlockExecutor(db),
+		NewDefaultBlockStore(db),
+		obsvC,
+		sendC,
+	)
+
 	consensusState.SetPrivValidator(privVal)
 
 	go func() {
