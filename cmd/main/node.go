@@ -55,9 +55,11 @@ func init() {
 	datadir = NodeCmd.Flags().String("datadir", "./datadir", "Path to database")
 
 	validatorSet = NodeCmd.Flags().StringArray("validatorSet", []string{}, "List of validators")
+}
 
+func runNode(cmd *cobra.Command, args []string) {
 	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
-	glogger.Verbosity(log.LvlInfo)
+	glogger.Verbosity(log.Lvl(*verbosity))
 	log.Root().SetHandler(glogger)
 
 	// setup logger
@@ -72,11 +74,6 @@ func init() {
 
 	glogger.SetHandler(ostream)
 
-	// logging
-	glogger.Verbosity(log.Lvl(*verbosity))
-}
-
-func runNode(cmd *cobra.Command, args []string) {
 	// Node's main lifecycle context.
 	rootCtx, rootCtxCancel := context.WithCancel(context.Background())
 	defer rootCtxCancel()
