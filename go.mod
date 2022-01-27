@@ -133,7 +133,7 @@ require (
 require (
 	github.com/tendermint/tendermint v0.35.0
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
-	golang.org/x/sys v0.0.0-20211013075003-97ac67df715c // indirect
+	golang.org/x/sys v0.0.0-20211013075003-97ac67df715c
 )
 
 require (

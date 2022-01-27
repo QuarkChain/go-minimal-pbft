@@ -43,13 +43,14 @@ type Proposal struct {
 
 // NewProposal returns a new Proposal.
 // If there is no POLRound, polRound should be -1.
-func NewProposal(height uint64, round int32, polRound int32, blockID common.Hash) *Proposal {
+func NewProposal(height uint64, round int32, polRound int32, blockID common.Hash, block *Block) *Proposal {
 	return &Proposal{
 		Height:      height,
 		Round:       round,
 		POLRound:    polRound,
 		BlockID:     blockID,
 		TimestampMs: CanonicalNowMs(),
+		Block:       block,
 	}
 }
 

@@ -3,6 +3,7 @@ package consensus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -121,6 +122,8 @@ func (bs *BaseService) Start(ctx context.Context) error {
 			return ErrAlreadyStopped
 		}
 
+		fmt.Println(bs)
+		fmt.Println(bs.impl)
 		log.Info("starting service", "service", bs.name, "impl", bs.impl.String())
 
 		if err := bs.impl.OnStart(ctx); err != nil {

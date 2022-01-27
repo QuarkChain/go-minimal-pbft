@@ -107,6 +107,10 @@ type weightedTime struct {
 	Weight int64
 }
 
+// MedianTime computes a median time for a given Commit (based on Timestamp field of votes messages) and the
+// corresponding validator set. The computed time is always between timestamps of
+// the votes sent by honest processes, i.e., a faulty processes can not arbitrarily increase or decrease the
+// computed value.
 func MedianTime(commit *Commit, validators *ValidatorSet) uint64 {
 	weightedTimes := make([]*weightedTime, len(commit.Signatures))
 

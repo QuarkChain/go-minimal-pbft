@@ -16,6 +16,8 @@ import (
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 
 	p2pcrypto "github.com/libp2p/go-libp2p-core/crypto"
 )
@@ -28,6 +30,7 @@ var (
 	valKeyPath   *string
 	nodeName     *string
 	verbosity    *int
+	datadir      *string
 )
 
 var NodeCmd = &cobra.Command{
@@ -48,6 +51,7 @@ func init() {
 	verbosity = NodeCmd.Flags().Int("verbosity", 3, "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail")
 
 	valKeyPath = NodeCmd.Flags().String("valKey", "", "Path to validator key (empty if not a validator)")
+	datadir = NodeCmd.Flags().String("datadir", "./datadir", "Path to database")
 
 	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
 	glogger.Verbosity(log.LvlInfo)
@@ -105,13 +109,24 @@ func runNode(cmd *cobra.Command, args []string) {
 		pubVal, err = privVal.GetPubKey(rootCtx)
 		if err != nil {
 			log.Error("Failed to load valiator pub key", "err", err)
+			return
 		}
 		log.Info("Running validator", "addr", pubVal.Address())
 	}
 
 	gcs := consensus.MakeGenesisChainState("test", uint64(time.Now().UnixMilli()), []common.Address{pubVal.Address()})
 
-	consensus.NewConsensusState(rootCtx, consensus.NewDefaultConsesusConfig(), *gcs, consensus.NewDefaultBlockExecutor(nil), NewDefaultBlockStore(nil))
+	db, err := leveldb.OpenFile(*datadir, &opt.Options{ErrorIfExist: true})
+	if err != nil {
+		log.Error("Failed to create db", "err", err)
+		return
+	}
+
+	consensusState := consensus.NewConsensusState(rootCtx, consensus.NewDefaultConsesusConfig(), *gcs, consensus.NewDefaultBlockExecutor(db), NewDefaultBlockStore(db))
+	consensusState.SetPrivValidator(privVal)
+
+	// Run block sync before consensus?
+	consensusState.Start(rootCtx)
 
 	go p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
 

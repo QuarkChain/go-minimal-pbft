@@ -16,7 +16,7 @@ type Header struct {
 	Height          uint64
 	TimeMs          uint64
 	ProposerAddress common.Address
-	CommitHash      common.Hash
+	LastCommitHash  common.Hash
 }
 
 type Block struct {
@@ -26,7 +26,7 @@ type Block struct {
 }
 
 func (b *Block) fillHeader() {
-	b.CommitHash = b.LastCommit.Hash()
+	b.LastCommitHash = b.LastCommit.Hash()
 }
 
 func (b *Block) Hash() common.Hash {

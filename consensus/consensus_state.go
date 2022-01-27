@@ -101,7 +101,7 @@ var msgQueueSize = 1000
 // commits blocks to the chain and executes them against the application.
 // The internal state machine receives input from peers, the internal validator, and from a timer.
 type ConsensusState struct {
-	// service.BaseService
+	BaseService
 
 	// config details
 	config            *ConsensusConfig
@@ -121,7 +121,7 @@ type ConsensusState struct {
 	// internal state
 	mtx sync.RWMutex
 	RoundState
-	state ChainState // State until height-1.
+	chainState ChainState // State until height-1.
 	// privValidator pubkey, memoized for the duration of one block
 	// to avoid extra requests to HSM
 	privValidatorPubKey PubKey
@@ -192,6 +192,7 @@ func NewConsensusState(
 	cs.decideProposal = cs.defaultDecideProposal
 	cs.doPrevote = cs.defaultDoPrevote
 	cs.setProposal = cs.defaultSetProposal
+	cs.createProposalFunc = cs.defaultCreateBlock
 
 	// We have no votes, so reconstruct LastCommit from SeenCommit.
 	if state.LastBlockHeight > 0 {
@@ -202,7 +203,13 @@ func NewConsensusState(
 
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()
 
+	cs.BaseService = *NewBaseService("State", cs)
+
 	return cs
+}
+
+func (cs *ConsensusState) defaultCreateBlock(height uint64, commit *Commit, proposerAddr common.Address) *Block {
+	return cs.chainState.MakeBlock(height, commit, proposerAddr)
 }
 
 // String returns a string.
@@ -537,19 +544,19 @@ func (cs *ConsensusState) updateToState(ctx context.Context, state ChainState) {
 		))
 	}
 
-	if !cs.state.IsEmpty() {
-		if cs.state.LastBlockHeight > 0 && cs.state.LastBlockHeight+1 != cs.Height {
+	if !cs.chainState.IsEmpty() {
+		if cs.chainState.LastBlockHeight > 0 && cs.chainState.LastBlockHeight+1 != cs.Height {
 			// This might happen when someone else is mutating cs.state.
 			// Someone forgot to pass in state.Copy() somewhere?!
 			panic(fmt.Sprintf(
 				"inconsistent cs.state.LastBlockHeight+1 %v vs cs.Height %v",
-				cs.state.LastBlockHeight+1, cs.Height,
+				cs.chainState.LastBlockHeight+1, cs.Height,
 			))
 		}
-		if cs.state.LastBlockHeight > 0 && cs.Height == cs.state.InitialHeight {
+		if cs.chainState.LastBlockHeight > 0 && cs.Height == cs.chainState.InitialHeight {
 			panic(fmt.Sprintf(
 				"inconsistent cs.state.LastBlockHeight %v, expected 0 for initial height %v",
-				cs.state.LastBlockHeight, cs.state.InitialHeight,
+				cs.chainState.LastBlockHeight, cs.chainState.InitialHeight,
 			))
 		}
 
@@ -558,11 +565,11 @@ func (cs *ConsensusState) updateToState(ctx context.Context, state ChainState) {
 		// We don't want to reset e.g. the Votes, but we still want to
 		// signal the new round step, because other services (eg. txNotifier)
 		// depend on having an up-to-date peer state!
-		if state.LastBlockHeight <= cs.state.LastBlockHeight {
+		if state.LastBlockHeight <= cs.chainState.LastBlockHeight {
 			log.Debug(
 				"ignoring updateToState()",
 				"new_height", state.LastBlockHeight+1,
-				"old_height", cs.state.LastBlockHeight+1,
+				"old_height", cs.chainState.LastBlockHeight+1,
 			)
 			cs.newStep(ctx)
 			return
@@ -627,7 +634,7 @@ func (cs *ConsensusState) updateToState(ctx context.Context, state ChainState) {
 	cs.LastValidators = state.LastValidators
 	cs.TriggeredTimeoutPrecommit = false
 
-	cs.state = state
+	cs.chainState = state
 
 	// Finally, broadcast RoundState
 	cs.newStep(ctx)
@@ -1000,12 +1007,12 @@ func (cs *ConsensusState) defaultDecideProposal(height uint64, round int32) {
 
 	// Make proposal
 	propBlockID := block.Hash()
-	proposal := NewProposal(height, round, cs.ValidRound, propBlockID)
+	proposal := NewProposal(height, round, cs.ValidRound, propBlockID, block)
 
 	// wait the max amount we would wait for a proposal
 	ctx, cancel := context.WithTimeout(context.TODO(), cs.config.TimeoutPropose)
 	defer cancel()
-	if err := cs.privValidator.SignProposal(ctx, cs.state.ChainID, proposal); err == nil {
+	if err := cs.privValidator.SignProposal(ctx, cs.chainState.ChainID, proposal); err == nil {
 		// send proposal and block parts on internal msg queue
 		cs.sendInternalMessage(ctx, MsgInfo{&ProposalMessage{proposal}, ""})
 
@@ -1045,7 +1052,7 @@ func (cs *ConsensusState) createProposalBlock() (block *Block) {
 
 	var commit *Commit
 	switch {
-	case cs.Height == cs.state.InitialHeight:
+	case cs.Height == cs.chainState.InitialHeight:
 		// We're creating a proposal for the first block.
 		// The commit is empty, but not nil.
 		commit = NewCommit(0, 0, common.Hash{}, nil)
@@ -1116,7 +1123,7 @@ func (cs *ConsensusState) defaultDoPrevote(ctx context.Context, height uint64, r
 	}
 
 	// Validate proposal block
-	err := cs.blockExec.ValidateBlock(cs.state, cs.ProposalBlock)
+	err := cs.blockExec.ValidateBlock(cs.chainState, cs.ProposalBlock)
 	if err != nil {
 		// ProposalBlock is invalid, prevote nil.
 		log.Error("prevote step: ProposalBlock is invalid", "height", height, "round", round, "err", err)
@@ -1223,7 +1230,7 @@ func (cs *ConsensusState) enterPrecommit(ctx context.Context, height uint64, rou
 	// At this point, +2/3 prevoted for a particular block.
 
 	// If we're already locked on that block, precommit it, and update the LockedRound
-	if cs.LockedBlock.Hash() == blockID {
+	if cs.LockedBlock != nil && cs.LockedBlock.Hash() == blockID {
 		log.Debug("precommit step; +2/3 prevoted locked block; relocking", "height", height, "round", round)
 		cs.LockedRound = round
 
@@ -1236,7 +1243,7 @@ func (cs *ConsensusState) enterPrecommit(ctx context.Context, height uint64, rou
 		log.Debug("precommit step; +2/3 prevoted proposal block; locking", "height", height, "round", round, "hash", blockID)
 
 		// Validate the block.
-		if err := cs.blockExec.ValidateBlock(cs.state, cs.ProposalBlock); err != nil {
+		if err := cs.blockExec.ValidateBlock(cs.chainState, cs.ProposalBlock); err != nil {
 			panic(fmt.Sprintf("precommit step; +2/3 prevoted for an invalid block: %v", err))
 		}
 
@@ -1390,12 +1397,12 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlock(cs.state, block); err != nil {
+	if err := cs.blockExec.ValidateBlock(cs.chainState, block); err != nil {
 		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
 	}
 
 	log.Info(
-		"finalizing commit of block",
+		"Finalizing commit of block",
 		"height", height,
 		"hash", block.Hash(),
 		// "root", block.AppHash,
@@ -1444,7 +1451,7 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 	// fail.Fail() // XXX
 
 	// Create a copy of the state for staging and an event cache for txs.
-	stateCopy := cs.state.Copy()
+	stateCopy := cs.chainState.Copy()
 
 	// Execute and commit the block, update and save the state, and update the mempool.
 	// NOTE The block.AppHash wont reflect these txs until the next block.
@@ -1497,13 +1504,13 @@ func (cs *ConsensusState) defaultSetProposal(proposal *Proposal) error {
 	}
 
 	// Verify signature
-	if !cs.Validators.GetProposer().PubKey.VerifySignature(proposal.ProposalSignBytes(cs.state.ChainID), proposal.Signature) {
+	if !cs.Validators.GetProposer().PubKey.VerifySignature(proposal.ProposalSignBytes(cs.chainState.ChainID), proposal.Signature) {
 		return ErrInvalidProposalSignature
 	}
 
 	cs.Proposal = proposal
 	cs.ProposalBlock = proposal.Block
-	log.Info("received proposal", "proposal", proposal)
+	log.Info("Received proposal", "proposal", proposal)
 	return nil
 }
 
@@ -1751,7 +1758,7 @@ func (cs *ConsensusState) signVote(
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()
 
-	err := cs.privValidator.SignVote(ctx, cs.state.ChainID, vote)
+	err := cs.privValidator.SignVote(ctx, cs.chainState.ChainID, vote)
 
 	return vote, err
 }

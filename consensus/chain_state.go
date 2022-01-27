@@ -1,6 +1,8 @@
 package consensus
 
-import "github.com/ethereum/go-ethereum/common"
+import (
+	"github.com/ethereum/go-ethereum/common"
+)
 
 // State is a short description of the latest committed block of the Tendermint consensus.
 // It keeps all information necessary to validate new blocks,
@@ -90,4 +92,42 @@ func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs 
 		LastValidators:              &ValidatorSet{}, // not exist
 		LastHeightValidatorsChanged: 1,
 	}
+}
+
+//------------------------------------------------------------------------
+// Create a block from the latest state
+
+// MakeBlock builds a block from the current state with the given txs, commit,
+// and evidence. Note it also takes a proposerAddress because the state does not
+// track rounds, and hence does not know the correct proposer. TODO: fix this!
+func (state ChainState) MakeBlock(
+	height uint64,
+	// txs []types.Tx,
+	commit *Commit,
+	// evidence []types.Evidence,
+	proposerAddress common.Address,
+) *Block {
+
+	// Set time.
+	var timestamp uint64
+	if height == state.InitialHeight {
+		timestamp = state.LastBlockTime // genesis time
+	} else {
+		timestamp = MedianTime(commit, state.LastValidators)
+	}
+
+	// Build base block with block data.
+	block := &Block{
+		Header: Header{
+			LastBlockID:     state.LastBlockID,
+			Height:          height,
+			TimeMs:          timestamp,
+			ProposerAddress: proposerAddress,
+			LastCommitHash:  commit.Hash(),
+		},
+		Data:       []byte{},
+		LastCommit: commit,
+	}
+
+	return block
 }
