@@ -31,6 +31,7 @@ var (
 	nodeName     *string
 	verbosity    *int
 	datadir      *string
+	validatorSet *[]string
 )
 
 var NodeCmd = &cobra.Command{
@@ -45,13 +46,15 @@ func init() {
 	p2pBootstrap = NodeCmd.Flags().String("bootstrap", "", "P2P bootstrap peers (comma-separated)")
 
 	nodeName = NodeCmd.Flags().String("nodeName", "", "Node name to announce in gossip heartbeats")
-
 	nodeKeyPath = NodeCmd.Flags().String("nodeKey", "", "Path to node key (will be generated if it doesn't exist)")
 
 	verbosity = NodeCmd.Flags().Int("verbosity", 3, "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail")
 
 	valKeyPath = NodeCmd.Flags().String("valKey", "", "Path to validator key (empty if not a validator)")
+
 	datadir = NodeCmd.Flags().String("datadir", "./datadir", "Path to database")
+
+	validatorSet = NodeCmd.Flags().StringArray("validatorSet", []string{}, "List of validators")
 
 	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
 	glogger.Verbosity(log.LvlInfo)
@@ -114,7 +117,24 @@ func runNode(cmd *cobra.Command, args []string) {
 		log.Info("Running validator", "addr", pubVal.Address())
 	}
 
-	gcs := consensus.MakeGenesisChainState("test", uint64(time.Now().UnixMilli()), []common.Address{pubVal.Address()})
+	vals := make([]common.Address, len(*validatorSet))
+	found := false
+	for i, addrStr := range *validatorSet {
+		addr := common.HexToAddress(addrStr)
+		if pubVal != nil && addr == pubVal.Address() {
+			found = true
+		}
+		vals[i] = addr
+	}
+
+	if pubVal != nil && !found {
+		log.Error("Current validator is not in validator set")
+		return
+	} else {
+		log.Info("Validators", "vals", vals)
+	}
+
+	gcs := consensus.MakeGenesisChainState("test", uint64(time.Now().UnixMilli()), vals)
 
 	db, err := leveldb.OpenFile(*datadir, &opt.Options{ErrorIfExist: true})
 	if err != nil {
