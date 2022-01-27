@@ -94,8 +94,10 @@ func runNode(cmd *cobra.Command, args []string) {
 
 	if *nodeKeyPath == "" {
 		log.Error("Please specify --nodeKey")
+		return
 	}
 
+	// Read private key if the node is a validator
 	var privVal consensus.PrivValidator
 	var pubVal consensus.PubKey
 
@@ -114,6 +116,7 @@ func runNode(cmd *cobra.Command, args []string) {
 		log.Info("Running validator", "addr", pubVal.Address())
 	}
 
+	// Update validators
 	vals := make([]common.Address, len(*validatorSet))
 	found := false
 	for i, addrStr := range *validatorSet {

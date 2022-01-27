@@ -32,7 +32,7 @@ func TestSerdeProposal(t *testing.T) {
 				Height:          6,
 				TimeMs:          34534,
 				ProposerAddress: common.Address{},
-				CommitHash:      common.Hash{},
+				LastCommitHash:  common.Hash{},
 			},
 			Data:       []byte{},
 			LastCommit: cm,
