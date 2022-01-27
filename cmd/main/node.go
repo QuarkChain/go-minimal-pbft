@@ -85,8 +85,8 @@ func runNode(cmd *cobra.Command, args []string) {
 	obsvC := make(chan *consensus.MsgInfo, 50)
 
 	// Load p2p private key
-	var priv p2pcrypto.PrivKey
-	priv, err := getOrCreateNodeKey(*nodeKeyPath)
+	var p2pPriv p2pcrypto.PrivKey
+	p2pPriv, err := getOrCreateNodeKey(*nodeKeyPath)
 	if err != nil {
 		log.Error("Failed to load node key", "err", err)
 		return
@@ -145,10 +145,12 @@ func runNode(cmd *cobra.Command, args []string) {
 	consensusState := consensus.NewConsensusState(rootCtx, consensus.NewDefaultConsesusConfig(), *gcs, consensus.NewDefaultBlockExecutor(db), NewDefaultBlockStore(db))
 	consensusState.SetPrivValidator(privVal)
 
+	go func() {
+		p2p.Run(obsvC, sendC, p2pPriv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)(rootCtx)
+	}()
+
 	// Run block sync before consensus?
 	consensusState.Start(rootCtx)
-
-	go p2p.Run(obsvC, sendC, priv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
 
 	// Running the node
 	log.Info("Running the node")

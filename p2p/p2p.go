@@ -172,6 +172,7 @@ func Run(obsvC chan *consensus.MsgInfo,
 	rootCtxCancel context.CancelFunc) func(ctx context.Context) error {
 
 	return func(ctx context.Context) (re error) {
+		fmt.Println("running p2p")
 		h, err := libp2p.New(ctx,
 			// Use the keypair we generated
 			libp2p.Identity(priv),
@@ -215,15 +216,15 @@ func Run(obsvC chan *consensus.MsgInfo,
 
 		defer func() {
 			// TODO: libp2p cannot be cleanly restarted (https://github.com/libp2p/go-libp2p/issues/992)
-			log.Error("p2p routine has exited, cancelling root context...", zap.Error(re))
+			log.Error("p2p routine has exited, cancelling root context...", "err", re)
 			rootCtxCancel()
 		}()
 
-		log.Info("Connecting to bootstrap peers", zap.String("bootstrap_peers", bootstrapPeers))
+		log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
 		topic := fmt.Sprintf("%s/%s", networkID, "broadcast")
 
-		log.Info("Subscribing pubsub topic", zap.String("topic", topic))
+		log.Info("Subscribing pubsub topic", "topic", topic)
 		ps, err := pubsub.NewGossipSub(ctx, h)
 		if err != nil {
 			panic(err)
@@ -253,12 +254,12 @@ func Run(obsvC chan *consensus.MsgInfo,
 			}
 			ma, err := multiaddr.NewMultiaddr(addr)
 			if err != nil {
-				log.Error("Invalid bootstrap address", zap.String("peer", addr), zap.Error(err))
+				log.Error("Invalid bootstrap address", "peer", addr, "err", err)
 				continue
 			}
 			pi, err := peer.AddrInfoFromP2pAddr(ma)
 			if err != nil {
-				log.Error("Invalid bootstrap address", zap.String("peer", addr), zap.Error(err))
+				log.Error("Invalid bootstrap address", "peer", addr, "err", err)
 				continue
 			}
 
@@ -269,7 +270,7 @@ func Run(obsvC chan *consensus.MsgInfo,
 			}
 
 			if err = h.Connect(ctx, *pi); err != nil {
-				log.Error("Failed to connect to bootstrap peer", zap.String("peer", addr), zap.Error(err))
+				log.Error("Failed to connect to bootstrap peer", "peer", addr, "err", err)
 			} else {
 				successes += 1
 			}
@@ -282,8 +283,8 @@ func Run(obsvC chan *consensus.MsgInfo,
 			log.Info("Connected to bootstrap peers", zap.Int("num", successes))
 		}
 
-		log.Info("Node has been started", zap.String("peer_id", h.ID().String()),
-			zap.String("addrs", fmt.Sprintf("%v", h.Addrs())))
+		log.Info("Node has been started", "peer_id", h.ID().String(),
+			"addrs", fmt.Sprintf("%v", h.Addrs()))
 
 		// TODO: create a thread to send heartbeat?
 
