@@ -147,10 +147,10 @@ type ConsensusState struct {
 	nSteps int
 
 	// some functions can be overwritten for testing
-	decideProposal     func(height uint64, round int32)
-	doPrevote          func(ctx context.Context, height uint64, round int32)
-	setProposal        func(proposal *Proposal) (bool, error)
-	createProposalFunc func(
+	decideProposal          func(height uint64, round int32)
+	doPrevote               func(ctx context.Context, height uint64, round int32)
+	setProposal             func(proposal *Proposal) (bool, error)
+	createProposalBlockFunc func(
 		height uint64,
 		commit *Commit,
 		proposerAddr common.Address,
@@ -196,7 +196,7 @@ func NewConsensusState(
 	cs.decideProposal = cs.defaultDecideProposal
 	cs.doPrevote = cs.defaultDoPrevote
 	cs.setProposal = cs.defaultSetProposal
-	cs.createProposalFunc = cs.defaultCreateBlock
+	cs.createProposalBlockFunc = cs.defaultCreateBlock
 
 	// We have no votes, so reconstruct LastCommit from SeenCommit.
 	if state.LastBlockHeight > 0 {
@@ -1101,7 +1101,7 @@ func (cs *ConsensusState) createProposalBlock() (block *Block) {
 
 	proposerAddr := cs.privValidatorPubKey.Address()
 
-	return cs.createProposalFunc(cs.Height, commit, proposerAddr)
+	return cs.createProposalBlockFunc(cs.Height, commit, proposerAddr)
 }
 
 // Enter: `timeoutPropose` after entering Propose.

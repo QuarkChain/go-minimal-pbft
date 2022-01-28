@@ -346,6 +346,13 @@ func Run(obsvC chan consensus.MsgInfo,
 				return fmt.Errorf("failed to receive pubsub message: %w", err)
 			}
 
+			if envelope.GetFrom() == h.ID() {
+				log.Debug("received message from ourselves, ignoring",
+					"payload", envelope.Data)
+				p2pMessagesReceived.WithLabelValues("loopback").Inc()
+				continue
+			}
+
 			msg, err := decode(envelope.Data)
 
 			if err != nil {
@@ -354,13 +361,6 @@ func Run(obsvC chan consensus.MsgInfo,
 					"data", envelope.Data,
 					"from", envelope.GetFrom().String())
 				p2pMessagesReceived.WithLabelValues("invalid").Inc()
-				continue
-			}
-
-			if envelope.GetFrom() == h.ID() {
-				log.Debug("received message from ourselves, ignoring",
-					"payload", msg)
-				p2pMessagesReceived.WithLabelValues("loopback").Inc()
 				continue
 			}
 

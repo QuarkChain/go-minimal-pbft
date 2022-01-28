@@ -121,9 +121,9 @@ func (vote *Vote) ValidateBasic() error {
 	}
 
 	// NOTE: Timestamp validation is subtle and handled elsewhere.
-	if (vote.BlockID == common.Hash{}) {
-		return fmt.Errorf("empty blockID")
-	}
+	// if (vote.BlockID == common.Hash{}) {
+	// 	return fmt.Errorf("empty blockID")
+	// }
 
 	// if err := vote.BlockID.ValidateBasic(); err != nil {
 	// 	return fmt.Errorf("wrong BlockID: %v", err)
