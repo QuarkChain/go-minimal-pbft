@@ -149,7 +149,7 @@ type ConsensusState struct {
 	// some functions can be overwritten for testing
 	decideProposal          func(height uint64, round int32)
 	doPrevote               func(ctx context.Context, height uint64, round int32)
-	setProposal             func(proposal *Proposal) (bool, error)
+	setProposal             func(ctx context.Context, proposal *Proposal) (bool, error)
 	createProposalBlockFunc func(
 		height uint64,
 		commit *Commit,
@@ -785,7 +785,7 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 	case *ProposalMessage:
 		// will not cause transition.
 		// once proposal is set, we can receive block parts
-		added, err = cs.setProposal(msg.Proposal)
+		added, err = cs.setProposal(ctx, msg.Proposal)
 
 		if added {
 			// broadcast the proposal to peer
@@ -1511,7 +1511,7 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 
 //-----------------------------------------------------------------------------
 
-func (cs *ConsensusState) defaultSetProposal(proposal *Proposal) (bool, error) {
+func (cs *ConsensusState) defaultSetProposal(ctx context.Context, proposal *Proposal) (bool, error) {
 	// Already have one
 	// TODO: possibly catch double proposals
 	if cs.Proposal != nil {
@@ -1537,6 +1537,39 @@ func (cs *ConsensusState) defaultSetProposal(proposal *Proposal) (bool, error) {
 	cs.Proposal = proposal
 	cs.ProposalBlock = proposal.Block
 	log.Info("Received proposal", "proposal", proposal)
+
+	// Update Valid* if we can.
+	prevotes := cs.Votes.Prevotes(cs.Round)
+	blockID, hasTwoThirds := prevotes.TwoThirdsMajority()
+	if hasTwoThirds && (blockID != common.Hash{}) && (cs.ValidRound < cs.Round) {
+		if cs.ProposalBlock.Hash() == blockID {
+			log.Debug(
+				"updating valid block to new proposal block",
+				"valid_round", cs.Round,
+				"valid_block_hash", cs.ProposalBlock.Hash(),
+			)
+
+			cs.ValidRound = cs.Round
+			cs.ValidBlock = cs.ProposalBlock
+		}
+		// TODO: In case there is +2/3 majority in Prevotes set for some
+		// block and cs.ProposalBlock contains different block, either
+		// proposer is faulty or voting power of faulty processes is more
+		// than 1/3. We should trigger in the future accountability
+		// procedure at this point.
+	}
+
+	if cs.Step <= RoundStepPropose && cs.isProposalComplete() {
+		// Move onto the next step
+		cs.enterPrevote(ctx, cs.Height, cs.Round)
+		if hasTwoThirds { // this is optimisation as this will be triggered when prevote is added
+			cs.enterPrecommit(ctx, cs.Height, cs.Round)
+		}
+	} else if cs.Step == RoundStepCommit {
+		// If we're waiting on the proposal block...
+		cs.tryFinalizeCommit(ctx, cs.Height)
+	}
+
 	return true, nil
 }
 
