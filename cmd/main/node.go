@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
@@ -23,15 +22,16 @@ import (
 )
 
 var (
-	p2pNetworkID *string
-	p2pPort      *uint
-	p2pBootstrap *string
-	nodeKeyPath  *string
-	valKeyPath   *string
-	nodeName     *string
-	verbosity    *int
-	datadir      *string
-	validatorSet *[]string
+	p2pNetworkID  *string
+	p2pPort       *uint
+	p2pBootstrap  *string
+	nodeKeyPath   *string
+	valKeyPath    *string
+	nodeName      *string
+	verbosity     *int
+	datadir       *string
+	validatorSet  *[]string
+	genesisTimeMs *uint64
 )
 
 var NodeCmd = &cobra.Command{
@@ -55,6 +55,7 @@ func init() {
 	datadir = NodeCmd.Flags().String("datadir", "./datadir", "Path to database")
 
 	validatorSet = NodeCmd.Flags().StringArray("validatorSet", []string{}, "List of validators")
+	genesisTimeMs = NodeCmd.Flags().Uint64("genesisTimeMs", 0, "Genesis block timestamp")
 }
 
 func runNode(cmd *cobra.Command, args []string) {
@@ -97,6 +98,12 @@ func runNode(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	// Check genesis timestamp
+	if *genesisTimeMs == 0 {
+		log.Error("Please specify --genesisTimeMs")
+		return
+	}
+
 	// Read private key if the node is a validator
 	var privVal consensus.PrivValidator
 	var pubVal consensus.PubKey
@@ -134,7 +141,7 @@ func runNode(cmd *cobra.Command, args []string) {
 		log.Info("Validators", "vals", vals)
 	}
 
-	gcs := consensus.MakeGenesisChainState("test", uint64(time.Now().UnixMilli()), vals)
+	gcs := consensus.MakeGenesisChainState("test", *genesisTimeMs, vals)
 
 	db, err := leveldb.OpenFile(*datadir, &opt.Options{ErrorIfExist: true})
 	if err != nil {

@@ -149,7 +149,7 @@ type ConsensusState struct {
 	// some functions can be overwritten for testing
 	decideProposal     func(height uint64, round int32)
 	doPrevote          func(ctx context.Context, height uint64, round int32)
-	setProposal        func(proposal *Proposal) error
+	setProposal        func(proposal *Proposal) (bool, error)
 	createProposalFunc func(
 		height uint64,
 		commit *Commit,
@@ -785,9 +785,9 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 	case *ProposalMessage:
 		// will not cause transition.
 		// once proposal is set, we can receive block parts
-		err = cs.setProposal(msg.Proposal)
+		added, err = cs.setProposal(msg.Proposal)
 
-		if err == nil {
+		if added {
 			// broadcast the proposal to peer
 			cs.broadcastMessageToPeers(ctx, msg)
 		}
@@ -1511,33 +1511,33 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 
 //-----------------------------------------------------------------------------
 
-func (cs *ConsensusState) defaultSetProposal(proposal *Proposal) error {
+func (cs *ConsensusState) defaultSetProposal(proposal *Proposal) (bool, error) {
 	// Already have one
 	// TODO: possibly catch double proposals
 	if cs.Proposal != nil {
-		return nil
+		return false, nil
 	}
 
 	// Does not apply
 	if proposal.Height != cs.Height || proposal.Round != cs.Round {
-		return nil
+		return false, nil
 	}
 
 	// Verify POLRound, which must be -1 or in range [0, proposal.Round).
 	if proposal.POLRound < -1 ||
 		(proposal.POLRound >= 0 && proposal.POLRound >= proposal.Round) {
-		return ErrInvalidProposalPOLRound
+		return false, ErrInvalidProposalPOLRound
 	}
 
 	// Verify signature
 	if !cs.Validators.GetProposer().PubKey.VerifySignature(proposal.ProposalSignBytes(cs.chainState.ChainID), proposal.Signature) {
-		return ErrInvalidProposalSignature
+		return false, ErrInvalidProposalSignature
 	}
 
 	cs.Proposal = proposal
 	cs.ProposalBlock = proposal.Block
 	log.Info("Received proposal", "proposal", proposal)
-	return nil
+	return true, nil
 }
 
 // Attempt to add the vote. if its a duplicate signature, dupeout the validator
