@@ -15,6 +15,15 @@ type ValidatorSet struct {
 	Proposer   *Validator   `json:"proposer"`
 }
 
+func NewValidatorSet(addrs []common.Address) *ValidatorSet {
+	validators := make([]*Validator, len(addrs))
+	for i, addr := range addrs {
+		pubkey := NewEcdsaPubKey(addr)
+		validators[i] = &Validator{Address: addr, PubKey: pubkey}
+	}
+	return &ValidatorSet{Validators: validators}
+}
+
 // HasAddress returns true if address given is in the validator set, false -
 // otherwise.
 func (vals *ValidatorSet) HasAddress(address common.Address) bool {

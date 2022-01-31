@@ -16,6 +16,7 @@ type Header struct {
 	Height          uint64
 	TimeMs          uint64
 	ProposerAddress common.Address
+	NextValidators  []common.Address
 	LastCommitHash  common.Hash
 }
 

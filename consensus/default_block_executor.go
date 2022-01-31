@@ -57,6 +57,11 @@ func validateBlock(state ChainState, block *Block) error {
 		}
 	}
 
+	// Don't allow validator change within the epoch
+	if block.Height%state.Epoch != 0 && len(block.NextValidators) != 0 {
+		return errors.New("cannot change validators within epoch")
+	}
+
 	// NOTE: We can't actually verify it's the right proposer because we don't
 	// know what round the block was first proposed. So just check that it's
 	// a legit address and a known validator.
@@ -158,7 +163,7 @@ func weightedMedian(weightedTimes []*weightedTime, totalVotingPower int64) (res 
 func (be *DefaultBlockExecutor) ApplyBlock(ctx context.Context, state ChainState, block *Block) (ChainState, error) {
 	// TOOD: execute the block & new validator change
 	// Update the state with the block and responses.
-	state, err := updateState(state, block.Hash(), &block.Header)
+	state, err := updateState(state, block.Hash(), &block.Header, []common.Address{})
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %v", err)
 	}
@@ -170,11 +175,19 @@ func updateState(
 	state ChainState,
 	blockID common.Hash,
 	header *Header,
+	nextValidators []common.Address,
 ) (ChainState, error) {
 
 	// Copy the valset so we can apply changes from EndBlock
 	// and update s.LastValidators and s.Validators.
 	nValSet := state.NextValidators.Copy()
+
+	if len(nextValidators) != 0 {
+		nValSet = NewValidatorSet(nextValidators)
+	}
+
+	// Update validator proposer priority and set state variables.
+	nValSet.IncrementProposerPriority(1)
 
 	// // Update the validator set with the latest abciResponses.
 	// lastHeightValsChanged := state.LastHeightValidatorsChanged
@@ -186,9 +199,6 @@ func updateState(
 	// 	// Change results from this height but only applies to the next next height.
 	// 	lastHeightValsChanged = header.Height + 1 + 1
 	// }
-
-	// Update validator proposer priority and set state variables.
-	nValSet.IncrementProposerPriority(1)
 
 	// Update the params with the latest abciResponses.
 	// nextParams := state.ConsensusParams
@@ -219,5 +229,6 @@ func updateState(
 		Validators:      state.NextValidators.Copy(),
 		LastValidators:  state.Validators.Copy(),
 		AppHash:         nil,
+		Epoch:           state.Epoch,
 	}, nil
 }

@@ -36,6 +36,7 @@ type ChainState struct {
 	// Changes returned by EndBlock and updated after Commit.
 	// ConsensusParams                  types.ConsensusParams
 	// LastHeightConsensusParamsChanged int64
+	Epoch uint64
 
 	// Merkle root of the results from executing prev block
 	// LastResultsHash []byte
@@ -63,6 +64,8 @@ func (state ChainState) Copy() ChainState {
 		LastValidators:              state.LastValidators.Copy(),
 		LastHeightValidatorsChanged: state.LastHeightValidatorsChanged,
 
+		Epoch: state.Epoch,
+
 		// ConsensusParams:                  state.ConsensusParams,
 		// LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
 
@@ -72,13 +75,8 @@ func (state ChainState) Copy() ChainState {
 	}
 }
 
-func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs []common.Address) *ChainState {
-	validators := make([]*Validator, len(validatorAddrs))
-	for i, addr := range validatorAddrs {
-		pubkey := NewEcdsaPubKey(addr)
-		validators[i] = &Validator{Address: addr, PubKey: pubkey}
-	}
-	vs := &ValidatorSet{Validators: validators}
+func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs []common.Address, epoch uint64) *ChainState {
+	vs := NewValidatorSet(validatorAddrs)
 	nextVs := vs.Copy()
 	nextVs.IncrementProposerPriority(1)
 	return &ChainState{
@@ -91,6 +89,7 @@ func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs 
 		NextValidators:              nextVs,
 		LastValidators:              &ValidatorSet{}, // not exist
 		LastHeightValidatorsChanged: 1,
+		Epoch:                       epoch,
 	}
 }
 
