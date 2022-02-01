@@ -63,6 +63,37 @@ func init() {
 	prometheus.MustRegister(p2pMessagesReceived)
 	decoder[1] = decodeProposal
 	decoder[2] = decodeVote
+	decoder[3] = decodeVerifiedBlock
+	decoder[4] = decodeHelloRequest
+	decoder[5] = decodeHelloResponse
+}
+
+type HelloRequest struct {
+	LastHeight uint64
+}
+
+type HelloResponse struct {
+	LastHeight uint64
+}
+
+func decodeHelloRequest(data []byte) (interface{}, error) {
+	var h HelloRequest
+	err := rlp.DecodeBytes(data, &h)
+	return h, err
+}
+
+func decodeHelloResponse(data []byte) (interface{}, error) {
+	var h HelloResponse
+	err := rlp.DecodeBytes(data, &h)
+	return h, err
+}
+
+func (req *HelloRequest) ValidateBasic() error {
+	return nil
+}
+
+func (req *HelloResponse) ValidateBasic() error {
+	return nil
 }
 
 // Vote represents a prevote, precommit, or commit vote from validators for
@@ -150,6 +181,12 @@ func decodeVote(data []byte) (interface{}, error) {
 	return v.toVote()
 }
 
+func decodeVerifiedBlock(data []byte) (interface{}, error) {
+	var b consensus.VerifiedBlock
+	err := rlp.DecodeBytes(data, &b)
+	return b, err
+}
+
 func decode(data []byte) (interface{}, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("incorrect msg")
@@ -173,6 +210,15 @@ func encode(msg interface{}) ([]byte, error) {
 	case *consensus.Vote:
 		typeData = []byte{2}
 		data, err = encodeVote(m)
+	case *consensus.VerifiedBlock:
+		typeData = []byte{3}
+		data, err = rlp.EncodeToBytes(m)
+	case *HelloRequest:
+		typeData = []byte{4}
+		data, err = rlp.EncodeToBytes(m)
+	case *HelloResponse:
+		typeData = []byte{5}
+		data, err = rlp.EncodeToBytes(m)
 	}
 
 	if err != nil {
@@ -376,6 +422,9 @@ func Run(obsvC chan consensus.MsgInfo,
 			case *consensus.Vote:
 				obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{Vote: m}, PeerID: string(envelope.GetFrom())}
 				p2pMessagesReceived.WithLabelValues("observation").Inc()
+			case *HelloRequest:
+				// TODO
+				// sendC <- &HelloResponse{}
 			default:
 				p2pMessagesReceived.WithLabelValues("unknown").Inc()
 				log.Warn("received unknown message type (running outdated software?)",

@@ -40,6 +40,11 @@ func (b *Block) Hash() common.Hash {
 	return crypto.Keccak256Hash(data)
 }
 
+type VerifiedBlock struct {
+	Block
+	SeenCommit *Commit // not necessarily the LastCommit of next block, but enough to check the validity of the block
+}
+
 // Commit contains the evidence that a block was committed by a set of validators.
 // NOTE: Commit is empty for height 1, but never nil.
 type Commit struct {
@@ -70,6 +75,7 @@ func (commit *Commit) ValidateBasic() error {
 		if len(commit.Signatures) == 0 {
 			return errors.New("no signatures in commit")
 		}
+
 		for i, commitSig := range commit.Signatures {
 			if err := commitSig.ValidateBasic(); err != nil {
 				return fmt.Errorf("wrong CommitSig #%d: %v", i, err)
