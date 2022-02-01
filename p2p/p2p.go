@@ -57,6 +57,14 @@ type ProposalRaw struct {
 	Block     *consensus.Block
 }
 
+const (
+	MsgProposal      = 0x01
+	MsgVote          = 0x02
+	MsgVerifiedBlock = 0x03
+	MsgHelloRequest  = 0x04
+	MsgHelloResponse = 0x05
+)
+
 func init() {
 	prometheus.MustRegister(p2pHeartbeatsSent)
 	prometheus.MustRegister(p2pMessagesSent)
@@ -197,6 +205,24 @@ func decode(data []byte) (interface{}, error) {
 	}
 
 	return decoder[data[0]](data[1:])
+}
+
+func encodeRaw(msg interface{}) ([]byte, error) {
+	var data []byte
+	var err error
+	switch m := msg.(type) {
+	case *consensus.Proposal:
+		data, err = encodeProposal(m)
+	case *consensus.Vote:
+		data, err = encodeVote(m)
+	case *consensus.VerifiedBlock:
+		data, err = rlp.EncodeToBytes(m)
+	case *HelloRequest:
+		data, err = rlp.EncodeToBytes(m)
+	case *HelloResponse:
+		data, err = rlp.EncodeToBytes(m)
+	}
+	return data, err
 }
 
 func encode(msg interface{}) ([]byte, error) {
