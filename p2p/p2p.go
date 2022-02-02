@@ -62,12 +62,13 @@ type ProposalRaw struct {
 }
 
 const (
-	MsgProposal      = 0x01
-	MsgVote          = 0x02
-	MsgVerifiedBlock = 0x03
-	MsgHelloRequest  = 0x04
-	MsgHelloResponse = 0x05
-	TopicHello       = "/go-minimal-pbft/hello/1.0.0"
+	MsgProposal        = 0x01
+	MsgVote            = 0x02
+	MsgVerifiedBlock   = 0x03
+	MsgHelloRequest    = 0x04
+	MsgHelloResponse   = 0x05
+	TopicHello         = "/mpbft/dev/hello/1.0.0"
+	TopicVerifiedBlock = "/mpbft/dev/verified_block/1.0.0"
 )
 
 func init() {
@@ -344,7 +345,6 @@ func SendRPC(ctx context.Context, h host.Host, peer peer.ID, topic string, req i
 
 type Server struct {
 	Host          host.Host
-	state         *consensus.ConsensusState
 	blockStore    consensus.BlockStore
 	obsvC         chan consensus.MsgInfo
 	sendC         chan consensus.Message
@@ -357,7 +357,6 @@ type Server struct {
 
 func NewP2PServer(
 	ctx context.Context,
-	state *consensus.ConsensusState,
 	blockStore consensus.BlockStore,
 	obsvC chan consensus.MsgInfo,
 	sendC chan consensus.Message,
@@ -466,7 +465,7 @@ func NewP2PServer(
 			"payload", data,
 			"raw", data)
 
-		resp, err := rlp.EncodeToBytes(&HelloResponse{state.GetLastHeight()})
+		resp, err := rlp.EncodeToBytes(&HelloResponse{blockStore.Height()})
 		if err != nil {
 			return
 		}
@@ -477,7 +476,7 @@ func NewP2PServer(
 		}
 	})
 
-	h.SetStreamHandler("/go-minimal-pbft/verified_block/1.0.0", func(stream network.Stream) {
+	h.SetStreamHandler(TopicVerifiedBlock, func(stream network.Stream) {
 		defer stream.Close()
 
 		data, err := ReadMsgWithPrependedSize(stream)
@@ -496,6 +495,7 @@ func NewP2PServer(
 			"payload", data,
 			"raw", data)
 
+		// TODO: check height correctness
 		vb := &consensus.VerifiedBlock{
 			Block:      *blockStore.LoadBlock(msg.Height),
 			SeenCommit: blockStore.LoadBlockCommit(msg.Height),
@@ -524,7 +524,6 @@ func NewP2PServer(
 
 	return &Server{
 		Host:          h,
-		state:         state,
 		blockStore:    blockStore,
 		obsvC:         obsvC,
 		sendC:         sendC,

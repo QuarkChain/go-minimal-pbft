@@ -150,20 +150,9 @@ func runNode(cmd *cobra.Command, args []string) {
 	}
 
 	bs := NewDefaultBlockStore(db)
+	executor := consensus.NewDefaultBlockExecutor(db)
 
-	consensusState := consensus.NewConsensusState(
-		rootCtx,
-		consensus.NewDefaultConsesusConfig(),
-		*gcs,
-		consensus.NewDefaultBlockExecutor(db),
-		bs,
-		obsvC,
-		sendC,
-	)
-
-	consensusState.SetPrivValidator(privVal)
-
-	p2pserver, err := p2p.NewP2PServer(rootCtx, consensusState, bs, obsvC, sendC, p2pPriv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
+	p2pserver, err := p2p.NewP2PServer(rootCtx, bs, obsvC, sendC, p2pPriv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
 
 	go func() {
 		p2pserver.Run(rootCtx)
@@ -172,16 +161,31 @@ func runNode(cmd *cobra.Command, args []string) {
 	if len(vals) == 1 && pubVal != nil && vals[0] == pubVal.Address() {
 		log.Info("Running in self validator mode, skipping block sync")
 	} else {
-		bs := p2p.NewBlockSync(p2pserver.Host)
-		bs.Start()
+		bs := p2p.NewBlockSync(p2pserver.Host, *gcs, bs, executor)
+		bs.Start(rootCtx)
 		err := bs.WaitDone()
 		if err != nil {
 			log.Error("Failed in block sync", "err", err)
 			return
 		}
+
+		*gcs = bs.LastChainState()
 	}
 
-	// Run block sync before consensus?
+	// Block sync is done, now entering consensus stage
+	// TODO: what happen if the network advances to the next block after block sync?
+	consensusState := consensus.NewConsensusState(
+		rootCtx,
+		consensus.NewDefaultConsesusConfig(),
+		*gcs,
+		executor,
+		bs,
+		obsvC,
+		sendC,
+	)
+
+	consensusState.SetPrivValidator(privVal)
+
 	consensusState.Start(rootCtx)
 
 	// Running the node

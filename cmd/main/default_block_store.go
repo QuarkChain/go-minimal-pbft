@@ -82,6 +82,10 @@ func (bs *DefaultBlockStore) LoadBlockCommit(height uint64) *consensus.Commit {
 
 func (bs *DefaultBlockStore) SaveBlock(b *consensus.Block, c *consensus.Commit) {
 	// sanity check?
+	if b.Height != bs.Height()+1 {
+		panic(fmt.Sprintf("BlockStore can only save contiguous blocks. Wanted %v, got %v", bs.Height()+1, b.Height))
+	}
+
 	hd := make([]byte, 8)
 	binary.BigEndian.PutUint64(hd, b.Height)
 	bk := []byte("block")
@@ -105,6 +109,12 @@ func (bs *DefaultBlockStore) SaveBlock(b *consensus.Block, c *consensus.Commit) 
 	ck := []byte("commit")
 	ck = append(ck, hd...)
 	if err := bs.db.Put(ck, commitData, nil); err != nil {
+		return
+	}
+
+	data := make([]byte, 8)
+	binary.BigEndian.PutUint64(data, b.Height)
+	if err := bs.db.Put([]byte("height"), data, nil); err != nil {
 		return
 	}
 }

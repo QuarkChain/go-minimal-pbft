@@ -1356,13 +1356,13 @@ func (cs *ConsensusState) enterCommit(ctx context.Context, height uint64, commit
 	// The Locked* fields no longer matter.
 	// Move them over to ProposalBlock if they match the commit hash,
 	// otherwise they'll be cleared in updateToState.
-	if cs.LockedBlock.Hash() == blockID {
+	if cs.LockedBlock != nil && cs.LockedBlock.Hash() == blockID {
 		log.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "height", height, "commit_round", commitRound, "current", "block_hash", blockID)
 		cs.ProposalBlock = cs.LockedBlock
 	}
 
 	// If we don't have the block being committed, set up to get it.
-	if cs.ProposalBlock.Hash() != blockID {
+	if cs.ProposalBlock != nil && cs.ProposalBlock.Hash() != blockID {
 		log.Info(
 			"commit is for a block we do not know about; set ProposalBlock=nil",
 			"height", height, "commit_round", commitRound, "current",
@@ -1388,13 +1388,18 @@ func (cs *ConsensusState) tryFinalizeCommit(ctx context.Context, height uint64) 
 		return
 	}
 
-	if cs.ProposalBlock.Hash() != blockID {
+	if cs.ProposalBlock == nil || cs.ProposalBlock.Hash() != blockID {
 		// TODO: this happens every time if we're not a validator (ugly logs)
 		// TODO: ^^ wait, why does it matter that we're a validator?
+		var hash []byte
+		if cs.ProposalBlock != nil {
+			t := cs.ProposalBlock.Hash()
+			hash = t[:]
+		}
 		log.Debug(
 			"failed attempt to finalize commit; we do not have the commit block",
 			"height", height,
-			"proposal_block", cs.ProposalBlock.Hash(),
+			"proposal_block", hash,
 			"commit_block", blockID,
 		)
 		return
@@ -1420,7 +1425,7 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 	if !ok {
 		panic("cannot finalize commit; commit does not have 2/3 majority")
 	}
-	if block.Hash() != blockID {
+	if block == nil || block.Hash() != blockID {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
