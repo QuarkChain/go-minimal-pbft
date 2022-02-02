@@ -162,7 +162,7 @@ func runNode(cmd *cobra.Command, args []string) {
 	consensusState.SetPrivValidator(privVal)
 
 	go func() {
-		p2p.Run(obsvC, sendC, p2pPriv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)(rootCtx)
+		p2p.Run(consensusState, obsvC, sendC, p2pPriv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)(rootCtx)
 	}()
 
 	// Run block sync before consensus?

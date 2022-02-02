@@ -1,14 +1,18 @@
 package p2p
 
 import (
+	"bufio"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/go-minimal-pbft/consensus"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/multiformats/go-multiaddr"
 
@@ -74,6 +78,7 @@ func init() {
 	decoder[3] = decodeVerifiedBlock
 	decoder[4] = decodeHelloRequest
 	decoder[5] = decodeHelloResponse
+	decoder[6] = decodeGetVerifiedBlockRequest
 }
 
 type HelloRequest struct {
@@ -82,6 +87,10 @@ type HelloRequest struct {
 
 type HelloResponse struct {
 	LastHeight uint64
+}
+
+type GetVerifiedBlockRequest struct {
+	Height uint64
 }
 
 func decodeHelloRequest(data []byte) (interface{}, error) {
@@ -102,6 +111,12 @@ func (req *HelloRequest) ValidateBasic() error {
 
 func (req *HelloResponse) ValidateBasic() error {
 	return nil
+}
+
+func decodeGetVerifiedBlockRequest(data []byte) (interface{}, error) {
+	var req GetVerifiedBlockRequest
+	err := rlp.DecodeBytes(data, &req)
+	return req, err
 }
 
 // Vote represents a prevote, precommit, or commit vote from validators for
@@ -229,23 +244,22 @@ func encode(msg interface{}) ([]byte, error) {
 	var data []byte
 	var err error
 	var typeData []byte
-	switch m := msg.(type) {
+	switch msg.(type) {
 	case *consensus.Proposal:
 		typeData = []byte{1}
-		data, err = encodeProposal(m)
 	case *consensus.Vote:
 		typeData = []byte{2}
-		data, err = encodeVote(m)
 	case *consensus.VerifiedBlock:
 		typeData = []byte{3}
-		data, err = rlp.EncodeToBytes(m)
 	case *HelloRequest:
 		typeData = []byte{4}
-		data, err = rlp.EncodeToBytes(m)
 	case *HelloResponse:
 		typeData = []byte{5}
-		data, err = rlp.EncodeToBytes(m)
+	case *GetVerifiedBlockRequest:
+		typeData = []byte{6}
 	}
+
+	data, err = encodeRaw(msg)
 
 	if err != nil {
 		return nil, err
@@ -253,7 +267,30 @@ func encode(msg interface{}) ([]byte, error) {
 	return append(typeData, data...), nil
 }
 
-func Run(obsvC chan consensus.MsgInfo,
+func writeMsg(stream network.Stream, msg []byte) error {
+	size := make([]byte, 4)
+	binary.BigEndian.PutUint32(size, uint32(len(msg)))
+	n, err := stream.Write(size)
+	if err != nil {
+		return err
+	}
+	if n != len(size) {
+		return fmt.Errorf("not fully write")
+	}
+
+	n, err = stream.Write(msg)
+	if err != nil {
+		return err
+	}
+	if n != len(msg) {
+		return fmt.Errorf("not fully write")
+	}
+	return nil
+}
+
+func Run(
+	state *consensus.ConsensusState,
+	obsvC chan consensus.MsgInfo,
 	sendC chan consensus.Message,
 	priv crypto.PrivKey,
 	port uint,
@@ -367,6 +404,50 @@ func Run(obsvC chan consensus.MsgInfo,
 			}
 		}
 
+		h.SetStreamHandler("/go-minimal-pbft/steam/1.0.0", func(stream network.Stream) {
+			defer stream.Close()
+			r := bufio.NewReader(stream)
+
+			for {
+				pktSize := make([]byte, 4)
+				_, err := io.ReadFull(r, pktSize)
+				if err != nil {
+					return
+				}
+
+				size := binary.BigEndian.Uint32(pktSize)
+				data := make([]byte, size)
+				_, err = io.ReadFull(r, data)
+				if err != nil {
+					return
+				}
+
+				msg, err := decode(data)
+
+				if err != nil {
+					return
+				}
+
+				log.Debug("received message",
+					"payload", msg,
+					"raw", data)
+
+				switch m := msg.(type) {
+				case *HelloRequest:
+					resp, err := encode(&HelloResponse{state.GetLastHeight()})
+					if err != nil {
+						return
+					}
+					err = writeMsg(stream, resp)
+					if err != nil {
+						return
+					}
+				case *consensus.VerifiedBlock:
+					fmt.Println(m.Height)
+				}
+			}
+		})
+
 		// TODO: continually reconnect to bootstrap nodes?
 		if successes == 0 && !bootstrapNode {
 			return fmt.Errorf("failed to connect to any bootstrap peer")
@@ -449,8 +530,8 @@ func Run(obsvC chan consensus.MsgInfo,
 				obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{Vote: m}, PeerID: string(envelope.GetFrom())}
 				p2pMessagesReceived.WithLabelValues("observation").Inc()
 			case *HelloRequest:
-				// TODO
-				// sendC <- &HelloResponse{}
+			case *HelloResponse:
+			case *GetVerifiedBlockRequest:
 			default:
 				p2pMessagesReceived.WithLabelValues("unknown").Inc()
 				log.Warn("received unknown message type (running outdated software?)",
