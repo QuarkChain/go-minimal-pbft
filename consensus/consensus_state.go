@@ -1257,7 +1257,7 @@ func (cs *ConsensusState) enterPrecommit(ctx context.Context, height uint64, rou
 	// At this point, +2/3 prevoted for a particular block.
 
 	// If we're already locked on that block, precommit it, and update the LockedRound
-	if cs.LockedBlock != nil && cs.LockedBlock.Hash() == blockID {
+	if cs.LockedBlock.HashTo(blockID) {
 		log.Debug("precommit step; +2/3 prevoted locked block; relocking", "height", height, "round", round)
 		cs.LockedRound = round
 
@@ -1266,7 +1266,7 @@ func (cs *ConsensusState) enterPrecommit(ctx context.Context, height uint64, rou
 	}
 
 	// If +2/3 prevoted for proposal block, stage and precommit it
-	if cs.ProposalBlock != nil && cs.ProposalBlock.Hash() == blockID {
+	if cs.ProposalBlock.HashTo(blockID) {
 		log.Debug("precommit step; +2/3 prevoted proposal block; locking", "height", height, "round", round, "hash", blockID)
 
 		// Validate the block.
@@ -1356,13 +1356,13 @@ func (cs *ConsensusState) enterCommit(ctx context.Context, height uint64, commit
 	// The Locked* fields no longer matter.
 	// Move them over to ProposalBlock if they match the commit hash,
 	// otherwise they'll be cleared in updateToState.
-	if cs.LockedBlock != nil && cs.LockedBlock.Hash() == blockID {
+	if cs.LockedBlock.HashTo(blockID) {
 		log.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "height", height, "commit_round", commitRound, "current", "block_hash", blockID)
 		cs.ProposalBlock = cs.LockedBlock
 	}
 
 	// If we don't have the block being committed, set up to get it.
-	if cs.ProposalBlock != nil && cs.ProposalBlock.Hash() != blockID {
+	if !cs.ProposalBlock.HashTo(blockID) {
 		log.Info(
 			"commit is for a block we do not know about; set ProposalBlock=nil",
 			"height", height, "commit_round", commitRound, "current",
@@ -1388,7 +1388,7 @@ func (cs *ConsensusState) tryFinalizeCommit(ctx context.Context, height uint64) 
 		return
 	}
 
-	if cs.ProposalBlock == nil || cs.ProposalBlock.Hash() != blockID {
+	if !cs.ProposalBlock.HashTo(blockID) {
 		// TODO: this happens every time if we're not a validator (ugly logs)
 		// TODO: ^^ wait, why does it matter that we're a validator?
 		var hash []byte
@@ -1425,7 +1425,7 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 	if !ok {
 		panic("cannot finalize commit; commit does not have 2/3 majority")
 	}
-	if block == nil || block.Hash() != blockID {
+	if !block.HashTo(blockID) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
@@ -1548,7 +1548,7 @@ func (cs *ConsensusState) defaultSetProposal(ctx context.Context, proposal *Prop
 	prevotes := cs.Votes.Prevotes(cs.Round)
 	blockID, hasTwoThirds := prevotes.TwoThirdsMajority()
 	if hasTwoThirds && (blockID != common.Hash{}) && (cs.ValidRound < cs.Round) {
-		if cs.ProposalBlock.Hash() == blockID {
+		if cs.ProposalBlock.HashTo(blockID) {
 			log.Debug(
 				"updating valid block to new proposal block",
 				"valid_round", cs.Round,
@@ -1695,7 +1695,7 @@ func (cs *ConsensusState) addVote(
 			if (cs.LockedBlock != nil) &&
 				(cs.LockedRound < vote.Round) &&
 				(vote.Round <= cs.Round) &&
-				cs.LockedBlock.Hash() != blockID {
+				!cs.LockedBlock.HashTo(blockID) {
 
 				log.Debug("unlocking because of POL", "locked_round", cs.LockedRound, "pol_round", vote.Round)
 
@@ -1706,7 +1706,7 @@ func (cs *ConsensusState) addVote(
 			// Update Valid* if we can.
 			// NOTE: our proposal block may be nil or not what received a polka..
 			if (blockID != common.Hash{}) && (cs.ValidRound < vote.Round) && (vote.Round == cs.Round) {
-				if cs.ProposalBlock != nil && cs.ProposalBlock.Hash() == blockID {
+				if cs.ProposalBlock.HashTo(blockID) {
 					log.Debug("updating valid block because of POL", "valid_round", cs.ValidRound, "pol_round", vote.Round)
 					cs.ValidRound = vote.Round
 					cs.ValidBlock = cs.ProposalBlock

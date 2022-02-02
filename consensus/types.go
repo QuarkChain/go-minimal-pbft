@@ -40,6 +40,13 @@ func (b *Block) Hash() common.Hash {
 	return crypto.Keccak256Hash(data)
 }
 
+func (b *Block) HashTo(hash common.Hash) bool {
+	if b == nil {
+		return false
+	}
+	return b.Hash() == hash
+}
+
 type VerifiedBlock struct {
 	Block
 	SeenCommit *Commit // not necessarily the LastCommit of next block, but enough to check the validity of the block
