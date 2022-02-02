@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"bufio"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -267,14 +266,14 @@ func encode(msg interface{}) ([]byte, error) {
 	return append(typeData, data...), nil
 }
 
-func writeMsg(stream network.Stream, msg []byte) error {
-	size := make([]byte, 4)
-	binary.BigEndian.PutUint32(size, uint32(len(msg)))
-	n, err := stream.Write(size)
+func WriteMsgWithPrependedSize(stream network.Stream, msg []byte) error {
+	sizeBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(sizeBytes, uint32(len(msg)))
+	n, err := stream.Write(sizeBytes)
 	if err != nil {
 		return err
 	}
-	if n != len(size) {
+	if n != len(sizeBytes) {
 		return fmt.Errorf("not fully write")
 	}
 
@@ -288,8 +287,23 @@ func writeMsg(stream network.Stream, msg []byte) error {
 	return nil
 }
 
+func ReadMsgWithPrependedSize(stream network.Stream) ([]byte, error) {
+	sizeBytes := make([]byte, 4)
+	_, err := io.ReadFull(stream, sizeBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	size := binary.BigEndian.Uint32(sizeBytes)
+
+	msg := make([]byte, size)
+	_, err = io.ReadFull(stream, msg)
+	return msg, err
+}
+
 func Run(
 	state *consensus.ConsensusState,
+	blockStore consensus.BlockStore,
 	obsvC chan consensus.MsgInfo,
 	sendC chan consensus.Message,
 	priv crypto.PrivKey,
@@ -297,7 +311,8 @@ func Run(
 	networkID string,
 	bootstrapPeers string,
 	nodeName string,
-	rootCtxCancel context.CancelFunc) func(ctx context.Context) error {
+	rootCtxCancel context.CancelFunc,
+) func(ctx context.Context) error {
 
 	return func(ctx context.Context) (re error) {
 		fmt.Println("running p2p")
@@ -404,47 +419,68 @@ func Run(
 			}
 		}
 
-		h.SetStreamHandler("/go-minimal-pbft/steam/1.0.0", func(stream network.Stream) {
+		h.SetStreamHandler("/go-minimal-pbft/hello/1.0.0", func(stream network.Stream) {
 			defer stream.Close()
-			r := bufio.NewReader(stream)
 
-			for {
-				pktSize := make([]byte, 4)
-				_, err := io.ReadFull(r, pktSize)
-				if err != nil {
-					return
-				}
+			data, err := ReadMsgWithPrependedSize(stream)
+			if err != nil {
+				return
+			}
 
-				size := binary.BigEndian.Uint32(pktSize)
-				data := make([]byte, size)
-				_, err = io.ReadFull(r, data)
-				if err != nil {
-					return
-				}
+			var msg HelloRequest
 
-				msg, err := decode(data)
+			err = rlp.DecodeBytes(data, &msg)
+			if err != nil {
+				return
+			}
 
-				if err != nil {
-					return
-				}
+			log.Debug("received hello",
+				"payload", data,
+				"raw", data)
 
-				log.Debug("received message",
-					"payload", msg,
-					"raw", data)
+			resp, err := rlp.EncodeToBytes(&HelloResponse{state.GetLastHeight()})
+			if err != nil {
+				return
+			}
 
-				switch m := msg.(type) {
-				case *HelloRequest:
-					resp, err := encode(&HelloResponse{state.GetLastHeight()})
-					if err != nil {
-						return
-					}
-					err = writeMsg(stream, resp)
-					if err != nil {
-						return
-					}
-				case *consensus.VerifiedBlock:
-					fmt.Println(m.Height)
-				}
+			err = WriteMsgWithPrependedSize(stream, resp)
+			if err != nil {
+				return
+			}
+		})
+
+		h.SetStreamHandler("/go-minimal-pbft/verified_block/1.0.0", func(stream network.Stream) {
+			defer stream.Close()
+
+			data, err := ReadMsgWithPrependedSize(stream)
+			if err != nil {
+				return
+			}
+
+			var msg GetVerifiedBlockRequest
+
+			err = rlp.DecodeBytes(data, &msg)
+			if err != nil {
+				return
+			}
+
+			log.Debug("received verified_block_req",
+				"payload", data,
+				"raw", data)
+
+			vb := &consensus.VerifiedBlock{
+				Block:      *blockStore.LoadBlock(msg.Height),
+				SeenCommit: blockStore.LoadBlockCommit(msg.Height),
+			}
+
+			resp, err := rlp.EncodeToBytes(vb)
+			if err != nil {
+				return
+			}
+
+			err = WriteMsgWithPrependedSize(stream, resp)
+			if err != nil {
+				return
 			}
 		})
 
@@ -459,6 +495,25 @@ func Run(
 			"addrs", fmt.Sprintf("%v", h.Addrs()))
 
 		// TODO: create a thread to send heartbeat?
+
+		h.Network().Notify(&network.NotifyBundle{ConnectedF: func(net network.Network, conn network.Conn) {
+			// Must be in goroutine to prevent blocking the callback
+			go func() {
+				s, err := h.NewStream(context.Background(), conn.RemotePeer(), "/go-minimal-pbft/steam/1.0.0")
+				if err != nil {
+					log.Error("Cannot create stream", "peer", conn.RemotePeer(), "err", err)
+				}
+
+				req, err := encode(&HelloRequest{})
+				if err != nil {
+					log.Error("Cannot create stream", "peer", conn.RemotePeer(), "err", err)
+				}
+
+				WriteMsgWithPrependedSize(s, req)
+
+				defer s.Close()
+			}()
+		}})
 
 		go func() {
 			for {

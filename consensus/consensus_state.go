@@ -73,6 +73,7 @@ type BlockStore interface {
 	Height() uint64 // last known contiguous block height
 	Size() uint64   // return number of blocks in the store
 
+	LoadBlock(height uint64) *Block
 	LoadBlockCommit(height uint64) *Commit
 	LoadSeenCommit() *Commit
 
