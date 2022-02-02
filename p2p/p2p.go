@@ -13,6 +13,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 	"github.com/multiformats/go-multiaddr"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -66,6 +67,7 @@ const (
 	MsgVerifiedBlock = 0x03
 	MsgHelloRequest  = 0x04
 	MsgHelloResponse = 0x05
+	TopicHello       = "/go-minimal-pbft/hello/1.0.0"
 )
 
 func init() {
@@ -287,7 +289,7 @@ func WriteMsgWithPrependedSize(stream network.Stream, msg []byte) error {
 	return nil
 }
 
-func ReadMsgWithPrependedSize(stream network.Stream) ([]byte, error) {
+func ReadMsgWithPrependedSize(stream stream.Stream) ([]byte, error) {
 	sizeBytes := make([]byte, 4)
 	_, err := io.ReadFull(stream, sizeBytes)
 	if err != nil {
@@ -301,7 +303,60 @@ func ReadMsgWithPrependedSize(stream network.Stream) ([]byte, error) {
 	return msg, err
 }
 
-func Run(
+func Send(ctx context.Context, h host.Host, peer peer.ID, topic string, msg interface{}) (stream.Stream, error) {
+	data, err := rlp.EncodeToBytes(msg)
+	if err != nil {
+		return nil, err
+	}
+
+	stream, err := h.NewStream(ctx, peer, protocol.ID(topic))
+	if err != nil {
+		return nil, err
+	}
+
+	err = WriteMsgWithPrependedSize(stream, data)
+	if err != nil {
+		stream.Close()
+		return nil, err
+	}
+
+	if err := stream.CloseWrite(); err != nil {
+		stream.Reset()
+		return nil, err
+	}
+	return stream, err
+}
+
+func SendRPC(ctx context.Context, h host.Host, peer peer.ID, topic string, req interface{}, resp interface{}) error {
+	s, err := Send(ctx, h, peer, topic, req)
+	if err != nil {
+		return err
+	}
+
+	// TODO: timeout?
+	data, err := ReadMsgWithPrependedSize(s)
+	if err != nil {
+		return err
+	}
+
+	return rlp.DecodeBytes(data, resp)
+}
+
+type Server struct {
+	Host          host.Host
+	state         *consensus.ConsensusState
+	blockStore    consensus.BlockStore
+	obsvC         chan consensus.MsgInfo
+	sendC         chan consensus.Message
+	priv          crypto.PrivKey
+	port          uint
+	networkID     string
+	nodeName      string
+	rootCtxCancel context.CancelFunc
+}
+
+func NewP2PServer(
+	ctx context.Context,
 	state *consensus.ConsensusState,
 	blockStore consensus.BlockStore,
 	obsvC chan consensus.MsgInfo,
@@ -312,288 +367,301 @@ func Run(
 	bootstrapPeers string,
 	nodeName string,
 	rootCtxCancel context.CancelFunc,
-) func(ctx context.Context) error {
+) (*Server, error) {
+	h, err := libp2p.New(ctx,
+		// Use the keypair we generated
+		libp2p.Identity(priv),
 
-	return func(ctx context.Context) (re error) {
-		fmt.Println("running p2p")
-		h, err := libp2p.New(ctx,
-			// Use the keypair we generated
-			libp2p.Identity(priv),
+		// Multiple listen addresses
+		libp2p.ListenAddrStrings(
+			// Listen on QUIC only.
+			// https://github.com/libp2p/go-libp2p/issues/688
+			fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", port),
+			fmt.Sprintf("/ip6/::/udp/%d/quic", port),
+		),
 
-			// Multiple listen addresses
-			libp2p.ListenAddrStrings(
-				// Listen on QUIC only.
-				// https://github.com/libp2p/go-libp2p/issues/688
-				fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", port),
-				fmt.Sprintf("/ip6/::/udp/%d/quic", port),
-			),
+		// Enable TLS security as the only security protocol.
+		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 
-			// Enable TLS security as the only security protocol.
-			libp2p.Security(libp2ptls.ID, libp2ptls.New),
+		// Enable QUIC transport as the only transport.
+		libp2p.Transport(libp2pquic.NewTransport),
 
-			// Enable QUIC transport as the only transport.
-			libp2p.Transport(libp2pquic.NewTransport),
+		// Let's prevent our peer from having too many
+		// connections by attaching a connection manager.
+		libp2p.ConnectionManager(connmgr.NewConnManager(
+			100,         // Lowwater
+			400,         // HighWater,
+			time.Minute, // GracePeriod
+		)),
 
-			// Let's prevent our peer from having too many
-			// connections by attaching a connection manager.
-			libp2p.ConnectionManager(connmgr.NewConnManager(
-				100,         // Lowwater
-				400,         // HighWater,
-				time.Minute, // GracePeriod
-			)),
+		// Let this host use the DHT to find other hosts
+		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+			// TODO(leo): Persistent data store (i.e. address book)
+			idht, err := dht.New(ctx, h, dht.Mode(dht.ModeServer),
+				// TODO(leo): This intentionally makes us incompatible with the global IPFS DHT
+				dht.ProtocolPrefix(protocol.ID("/"+networkID)),
+			)
+			return idht, err
+		}),
+	)
 
-			// Let this host use the DHT to find other hosts
-			libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-				// TODO(leo): Persistent data store (i.e. address book)
-				idht, err := dht.New(ctx, h, dht.Mode(dht.ModeServer),
-					// TODO(leo): This intentionally makes us incompatible with the global IPFS DHT
-					dht.ProtocolPrefix(protocol.ID("/"+networkID)),
-				)
-				return idht, err
-			}),
-		)
+	if err != nil {
+		return nil, err
+	}
 
+	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
+
+	// Add our own bootstrap nodes
+
+	// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill
+	// the service and have supervisor retry it.
+	successes := 0
+	// Are we a bootstrap node? If so, it's okay to not have any peers.
+	bootstrapNode := false
+
+	for _, addr := range strings.Split(bootstrapPeers, ",") {
+		if addr == "" {
+			continue
+		}
+		ma, err := multiaddr.NewMultiaddr(addr)
 		if err != nil {
-			panic(err)
+			log.Error("Invalid bootstrap address", "peer", addr, "err", err)
+			continue
 		}
-
-		defer func() {
-			// TODO: libp2p cannot be cleanly restarted (https://github.com/libp2p/go-libp2p/issues/992)
-			log.Error("p2p routine has exited, cancelling root context...", "err", re)
-			rootCtxCancel()
-		}()
-
-		log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
-
-		topic := fmt.Sprintf("%s/%s", networkID, "broadcast")
-
-		log.Info("Subscribing pubsub topic", "topic", topic)
-		ps, err := pubsub.NewGossipSub(ctx, h)
+		pi, err := peer.AddrInfoFromP2pAddr(ma)
 		if err != nil {
-			panic(err)
+			log.Error("Invalid bootstrap address", "peer", addr, "err", err)
+			continue
 		}
 
-		th, err := ps.Join(topic)
-		if err != nil {
-			return fmt.Errorf("failed to join topic: %w", err)
+		if pi.ID == h.ID() {
+			log.Info("We're a bootstrap node")
+			bootstrapNode = true
+			continue
 		}
 
-		sub, err := th.Subscribe()
-		if err != nil {
-			return fmt.Errorf("failed to subscribe topic: %w", err)
-		}
-
-		// Add our own bootstrap nodes
-
-		// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill
-		// the service and have supervisor retry it.
-		successes := 0
-		// Are we a bootstrap node? If so, it's okay to not have any peers.
-		bootstrapNode := false
-
-		for _, addr := range strings.Split(bootstrapPeers, ",") {
-			if addr == "" {
-				continue
-			}
-			ma, err := multiaddr.NewMultiaddr(addr)
-			if err != nil {
-				log.Error("Invalid bootstrap address", "peer", addr, "err", err)
-				continue
-			}
-			pi, err := peer.AddrInfoFromP2pAddr(ma)
-			if err != nil {
-				log.Error("Invalid bootstrap address", "peer", addr, "err", err)
-				continue
-			}
-
-			if pi.ID == h.ID() {
-				log.Info("We're a bootstrap node")
-				bootstrapNode = true
-				continue
-			}
-
-			if err = h.Connect(ctx, *pi); err != nil {
-				log.Error("Failed to connect to bootstrap peer", "peer", addr, "err", err)
-			} else {
-				successes += 1
-			}
-		}
-
-		h.SetStreamHandler("/go-minimal-pbft/hello/1.0.0", func(stream network.Stream) {
-			defer stream.Close()
-
-			data, err := ReadMsgWithPrependedSize(stream)
-			if err != nil {
-				return
-			}
-
-			var msg HelloRequest
-
-			err = rlp.DecodeBytes(data, &msg)
-			if err != nil {
-				return
-			}
-
-			log.Debug("received hello",
-				"payload", data,
-				"raw", data)
-
-			resp, err := rlp.EncodeToBytes(&HelloResponse{state.GetLastHeight()})
-			if err != nil {
-				return
-			}
-
-			err = WriteMsgWithPrependedSize(stream, resp)
-			if err != nil {
-				return
-			}
-		})
-
-		h.SetStreamHandler("/go-minimal-pbft/verified_block/1.0.0", func(stream network.Stream) {
-			defer stream.Close()
-
-			data, err := ReadMsgWithPrependedSize(stream)
-			if err != nil {
-				return
-			}
-
-			var msg GetVerifiedBlockRequest
-
-			err = rlp.DecodeBytes(data, &msg)
-			if err != nil {
-				return
-			}
-
-			log.Debug("received verified_block_req",
-				"payload", data,
-				"raw", data)
-
-			vb := &consensus.VerifiedBlock{
-				Block:      *blockStore.LoadBlock(msg.Height),
-				SeenCommit: blockStore.LoadBlockCommit(msg.Height),
-			}
-
-			resp, err := rlp.EncodeToBytes(vb)
-			if err != nil {
-				return
-			}
-
-			err = WriteMsgWithPrependedSize(stream, resp)
-			if err != nil {
-				return
-			}
-		})
-
-		// TODO: continually reconnect to bootstrap nodes?
-		if successes == 0 && !bootstrapNode {
-			return fmt.Errorf("failed to connect to any bootstrap peer")
+		if err = h.Connect(ctx, *pi); err != nil {
+			log.Error("Failed to connect to bootstrap peer", "peer", addr, "err", err)
 		} else {
-			log.Info("Connected to bootstrap peers", "num", successes)
+			successes += 1
+		}
+	}
+
+	h.SetStreamHandler(TopicHello, func(stream network.Stream) {
+		defer stream.Close()
+
+		data, err := ReadMsgWithPrependedSize(stream)
+		if err != nil {
+			return
 		}
 
-		log.Info("Node has been started", "peer_id", h.ID().String(),
-			"addrs", fmt.Sprintf("%v", h.Addrs()))
+		var msg HelloRequest
 
-		// TODO: create a thread to send heartbeat?
+		err = rlp.DecodeBytes(data, &msg)
+		if err != nil {
+			return
+		}
 
-		h.Network().Notify(&network.NotifyBundle{ConnectedF: func(net network.Network, conn network.Conn) {
-			// Must be in goroutine to prevent blocking the callback
-			go func() {
-				s, err := h.NewStream(context.Background(), conn.RemotePeer(), "/go-minimal-pbft/steam/1.0.0")
-				if err != nil {
-					log.Error("Cannot create stream", "peer", conn.RemotePeer(), "err", err)
-				}
+		log.Debug("received hello",
+			"payload", data,
+			"raw", data)
 
-				req, err := encode(&HelloRequest{})
-				if err != nil {
-					log.Error("Cannot create stream", "peer", conn.RemotePeer(), "err", err)
-				}
+		resp, err := rlp.EncodeToBytes(&HelloResponse{state.GetLastHeight()})
+		if err != nil {
+			return
+		}
 
-				WriteMsgWithPrependedSize(s, req)
+		err = WriteMsgWithPrependedSize(stream, resp)
+		if err != nil {
+			return
+		}
+	})
 
-				defer s.Close()
-			}()
-		}})
+	h.SetStreamHandler("/go-minimal-pbft/verified_block/1.0.0", func(stream network.Stream) {
+		defer stream.Close()
 
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case msg := <-sendC:
-					var err error
-					var data []byte
-					switch m := (msg).(type) {
-					case *consensus.ProposalMessage:
-						data, err = encode(m.Proposal)
-						if err == nil {
-							err = th.Publish(ctx, data)
-							p2pMessagesSent.Inc()
-						}
-					case *consensus.VoteMessage:
-						data, err = encode(m.Vote)
-						if err == nil {
-							err = th.Publish(ctx, data)
-							p2pMessagesSent.Inc()
-						}
-					default:
-						log.Error("unrecognized data to sent")
-					}
+		data, err := ReadMsgWithPrependedSize(stream)
+		if err != nil {
+			return
+		}
 
-					if err != nil {
-						log.Error("failed to publish message from queue", zap.Error(err))
-					}
+		var msg GetVerifiedBlockRequest
 
-				}
-			}
-		}()
+		err = rlp.DecodeBytes(data, &msg)
+		if err != nil {
+			return
+		}
 
+		log.Debug("received verified_block_req",
+			"payload", data,
+			"raw", data)
+
+		vb := &consensus.VerifiedBlock{
+			Block:      *blockStore.LoadBlock(msg.Height),
+			SeenCommit: blockStore.LoadBlockCommit(msg.Height),
+		}
+
+		resp, err := rlp.EncodeToBytes(vb)
+		if err != nil {
+			return
+		}
+
+		err = WriteMsgWithPrependedSize(stream, resp)
+		if err != nil {
+			return
+		}
+	})
+
+	// TODO: continually reconnect to bootstrap nodes?
+	if successes == 0 && !bootstrapNode {
+		return nil, fmt.Errorf("failed to connect to any bootstrap peer")
+	} else {
+		log.Info("Connected to bootstrap peers", "num", successes)
+	}
+
+	log.Info("Node has been started", "peer_id", h.ID().String(),
+		"addrs", fmt.Sprintf("%v", h.Addrs()))
+
+	return &Server{
+		Host:          h,
+		state:         state,
+		blockStore:    blockStore,
+		obsvC:         obsvC,
+		sendC:         sendC,
+		priv:          priv,
+		port:          port,
+		networkID:     networkID,
+		nodeName:      nodeName,
+		rootCtxCancel: rootCtxCancel,
+	}, nil
+}
+
+func (server *Server) Run(ctx context.Context) error {
+
+	var err error
+
+	defer func() {
+		// TODO: libp2p cannot be cleanly restarted (https://github.com/libp2p/go-libp2p/issues/992)
+		log.Error("p2p routine has exited, cancelling root context...", "err", err)
+		server.rootCtxCancel()
+	}()
+
+	topic := fmt.Sprintf("%s/%s", server.networkID, "broadcast")
+
+	log.Info("Subscribing pubsub topic", "topic", topic)
+	ps, err := pubsub.NewGossipSub(ctx, server.Host)
+	if err != nil {
+		panic(err)
+	}
+
+	th, err := ps.Join(topic)
+	if err != nil {
+		return fmt.Errorf("failed to join topic: %w", err)
+	}
+
+	sub, err := th.Subscribe()
+	if err != nil {
+		return fmt.Errorf("failed to subscribe topic: %w", err)
+	}
+
+	// TODO: create a thread to send heartbeat?
+
+	// h.Network().Notify(&network.NotifyBundle{ConnectedF: func(net network.Network, conn network.Conn) {
+	// 	// Must be in goroutine to prevent blocking the callback
+	// 	go func() {
+	// 		s, err := h.NewStream(context.Background(), conn.RemotePeer(), "/go-minimal-pbft/steam/1.0.0")
+	// 		if err != nil {
+	// 			log.Error("Cannot create stream", "peer", conn.RemotePeer(), "err", err)
+	// 		}
+
+	// 		req, err := encode(&HelloRequest{})
+	// 		if err != nil {
+	// 			log.Error("Cannot create stream", "peer", conn.RemotePeer(), "err", err)
+	// 		}
+
+	// 		WriteMsgWithPrependedSize(s, req)
+
+	// 		defer s.Close()
+	// 	}()
+	// }})
+
+	go func() {
 		for {
-			envelope, err := sub.Next(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to receive pubsub message: %w", err)
+			select {
+			case <-ctx.Done():
+				return
+			case msg := <-server.sendC:
+				var err error
+				var data []byte
+				switch m := (msg).(type) {
+				case *consensus.ProposalMessage:
+					data, err = encode(m.Proposal)
+					if err == nil {
+						err = th.Publish(ctx, data)
+						p2pMessagesSent.Inc()
+					}
+				case *consensus.VoteMessage:
+					data, err = encode(m.Vote)
+					if err == nil {
+						err = th.Publish(ctx, data)
+						p2pMessagesSent.Inc()
+					}
+				default:
+					log.Error("unrecognized data to sent")
+				}
+
+				if err != nil {
+					log.Error("failed to publish message from queue", zap.Error(err))
+				}
 			}
+		}
+	}()
 
-			if envelope.GetFrom() == h.ID() {
-				log.Debug("received message from ourselves, ignoring",
-					"payload", envelope.Data)
-				p2pMessagesReceived.WithLabelValues("loopback").Inc()
-				continue
-			}
+	for {
+		envelope, err := sub.Next(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to receive pubsub message: %w", err)
+		}
 
-			msg, err := decode(envelope.Data)
+		if envelope.GetFrom() == server.Host.ID() {
+			log.Debug("received message from ourselves, ignoring",
+				"payload", envelope.Data)
+			p2pMessagesReceived.WithLabelValues("loopback").Inc()
+			continue
+		}
 
-			if err != nil {
-				log.Info("received invalid message",
-					"err", err,
-					"data", envelope.Data,
-					"from", envelope.GetFrom().String())
-				p2pMessagesReceived.WithLabelValues("invalid").Inc()
-				continue
-			}
+		msg, err := decode(envelope.Data)
 
-			log.Debug("received message",
+		if err != nil {
+			log.Info("received invalid message",
+				"err", err,
+				"data", envelope.Data,
+				"from", envelope.GetFrom().String())
+			p2pMessagesReceived.WithLabelValues("invalid").Inc()
+			continue
+		}
+
+		log.Debug("received message",
+			"payload", msg,
+			"raw", envelope.Data,
+			"from", envelope.GetFrom().String())
+
+		switch m := msg.(type) {
+		case *consensus.Proposal:
+			server.obsvC <- consensus.MsgInfo{Msg: &consensus.ProposalMessage{Proposal: m}, PeerID: string(envelope.GetFrom())}
+			p2pMessagesReceived.WithLabelValues("observation").Inc()
+		case *consensus.Vote:
+			server.obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{Vote: m}, PeerID: string(envelope.GetFrom())}
+			p2pMessagesReceived.WithLabelValues("observation").Inc()
+		case *HelloRequest:
+		case *HelloResponse:
+		case *GetVerifiedBlockRequest:
+		default:
+			p2pMessagesReceived.WithLabelValues("unknown").Inc()
+			log.Warn("received unknown message type (running outdated software?)",
 				"payload", msg,
 				"raw", envelope.Data,
 				"from", envelope.GetFrom().String())
-
-			switch m := msg.(type) {
-			case *consensus.Proposal:
-				obsvC <- consensus.MsgInfo{Msg: &consensus.ProposalMessage{Proposal: m}, PeerID: string(envelope.GetFrom())}
-				p2pMessagesReceived.WithLabelValues("observation").Inc()
-			case *consensus.Vote:
-				obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{Vote: m}, PeerID: string(envelope.GetFrom())}
-				p2pMessagesReceived.WithLabelValues("observation").Inc()
-			case *HelloRequest:
-			case *HelloResponse:
-			case *GetVerifiedBlockRequest:
-			default:
-				p2pMessagesReceived.WithLabelValues("unknown").Inc()
-				log.Warn("received unknown message type (running outdated software?)",
-					"payload", msg,
-					"raw", envelope.Data,
-					"from", envelope.GetFrom().String())
-			}
 		}
 	}
 }

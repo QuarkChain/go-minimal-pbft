@@ -163,9 +163,23 @@ func runNode(cmd *cobra.Command, args []string) {
 
 	consensusState.SetPrivValidator(privVal)
 
+	p2pserver, err := p2p.NewP2PServer(rootCtx, consensusState, bs, obsvC, sendC, p2pPriv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)
+
 	go func() {
-		p2p.Run(consensusState, bs, obsvC, sendC, p2pPriv, *p2pPort, *p2pNetworkID, *p2pBootstrap, *nodeName, rootCtxCancel)(rootCtx)
+		p2pserver.Run(rootCtx)
 	}()
+
+	if len(vals) == 1 && pubVal != nil && vals[0] == pubVal.Address() {
+		log.Info("Running in self validator mode, skipping block sync")
+	} else {
+		bs := p2p.NewBlockSync(p2pserver.Host)
+		bs.Start()
+		err := bs.WaitDone()
+		if err != nil {
+			log.Error("Failed in block sync", "err", err)
+			return
+		}
+	}
 
 	// Run block sync before consensus?
 	consensusState.Start(rootCtx)
