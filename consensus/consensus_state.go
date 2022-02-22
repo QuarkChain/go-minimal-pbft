@@ -1426,7 +1426,7 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 	// fail.Fail() // XXX
 
 	// Save to blockStore.
-	if cs.blockStore.Height() < block.Number.Uint64() {
+	if cs.blockStore.Height() < block.NumberU64() {
 		// NOTE: the seenCommit is local justification to commit this block,
 		// but may differ from the LastCommit included in the next block
 		precommits := cs.Votes.Precommits(cs.CommitRound)
@@ -1821,9 +1821,9 @@ func (cs *ConsensusState) voteTime() uint64 {
 	// even if cs.LockedBlock != nil. See https://docs.tendermint.com/master/spec/.
 	if cs.LockedBlock != nil {
 		// See the BFT time spec https://docs.tendermint.com/master/spec/consensus/bft-time.html
-		minVoteTime = cs.LockedBlock.TimeMs + timeIota
+		minVoteTime = cs.LockedBlock.TimeMs() + timeIota
 	} else if cs.ProposalBlock != nil {
-		minVoteTime = cs.ProposalBlock.TimeMs + timeIota
+		minVoteTime = cs.ProposalBlock.TimeMs() + timeIota
 	}
 
 	if now > minVoteTime {

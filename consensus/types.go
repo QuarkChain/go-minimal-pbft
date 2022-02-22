@@ -1,11 +1,8 @@
 package consensus
 
 import (
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/chamber"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 type (
@@ -16,6 +13,9 @@ type (
 	ValidatorSet  = chamber.ValidatorSet
 	VoteSet       = chamber.VoteSet
 	HeightVoteSet = chamber.HeightVoteSet
+
+	Header = types.Header
+	Block  = types.Block
 
 	ErrVoteConflictingVotes = chamber.ErrVoteConflictingVotes
 )
@@ -29,35 +29,6 @@ var (
 )
 
 var MaxSignatureSize = 65
-
-type Header = types.Header
-
-type Block struct {
-	Header
-	Data       []byte
-	LastCommit *Commit
-}
-
-func (b *Block) fillHeader() {
-	b.LastCommitHash = b.LastCommit.Hash()
-}
-
-func (b *Block) Hash() common.Hash {
-	b.fillHeader()
-
-	data, err := rlp.EncodeToBytes(b.Header)
-	if err != nil {
-		panic("fail to rlp Commit")
-	}
-	return crypto.Keccak256Hash(data)
-}
-
-func (b *Block) HashTo(hash common.Hash) bool {
-	if b == nil {
-		return false
-	}
-	return b.Hash() == hash
-}
 
 type VerifiedBlock struct {
 	Block

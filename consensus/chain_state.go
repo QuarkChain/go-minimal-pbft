@@ -4,6 +4,8 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 // State is a short description of the latest committed block of the Tendermint consensus.
@@ -118,17 +120,19 @@ func (state ChainState) MakeBlock(
 	}
 
 	// Build base block with block data.
-	block := &Block{
-		Header: Header{
+	block := types.NewBlock(
+		&Header{
 			ParentHash:     state.LastBlockID,
 			Number:         big.NewInt(int64(height)),
 			TimeMs:         timestamp,
 			Coinbase:       proposerAddress,
 			LastCommitHash: commit.Hash(),
+			Difficulty:     big.NewInt(int64(height)),
+			Extra:          []byte{},
+			BaseFee:        big.NewInt(0), // TODO: update base fee
 		},
-		Data:       []byte{},
-		LastCommit: commit,
-	}
+		nil, nil, nil, trie.NewStackTrie(nil),
+	)
 
 	return block
 }

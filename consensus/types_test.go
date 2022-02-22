@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -52,8 +54,8 @@ func TestSerdeBlock(t *testing.T) {
 	}
 	cm := NewCommit(5, 6, common.Hash{}, []CommitSig{c})
 
-	b := Block{
-		Header: Header{
+	b := types.NewBlock(
+		&Header{
 			ParentHash:     common.Hash{},
 			Number:         big.NewInt(6),
 			TimeMs:         34534,
@@ -63,9 +65,9 @@ func TestSerdeBlock(t *testing.T) {
 			Extra:          []byte{},
 			BaseFee:        big.NewInt(2), // TODO
 		},
-		Data:       []byte{},
-		LastCommit: cm,
-	}
+		nil, nil, nil, trie.NewStackTrie(nil),
+	)
+	b.LastCommit = cm
 
 	data, err := rlp.EncodeToBytes(b)
 	assert.NoError(t, err)
