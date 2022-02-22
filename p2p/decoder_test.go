@@ -29,10 +29,13 @@ func TestSerdeProposal(t *testing.T) {
 		Block: &consensus.Block{
 			Header: consensus.Header{
 				ParentHash:     common.Hash{},
-				Number:         6,
+				Number:         big.NewInt(6),
 				TimeMs:         34534,
 				Coinbase:       common.Address{},
 				LastCommitHash: common.Hash{},
+				Difficulty:     big.NewInt(2),
+				Extra:          []byte{},
+				BaseFee:        big.NewInt(7),
 			},
 			Data:       []byte{},
 			LastCommit: cm,

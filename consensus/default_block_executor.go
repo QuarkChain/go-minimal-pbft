@@ -26,11 +26,11 @@ func validateBlock(state ChainState, block *Block) error {
 
 	// Validate basic info.
 
-	if state.LastBlockHeight == 0 && block.Number != state.InitialHeight {
+	if state.LastBlockHeight == 0 && block.Number.Uint64() != state.InitialHeight {
 		return fmt.Errorf("wrong Block.Header.Height. Expected %v for initial block, got %v",
 			block.Number, state.InitialHeight)
 	}
-	if state.LastBlockHeight > 0 && block.Number != state.LastBlockHeight+1 {
+	if state.LastBlockHeight > 0 && block.Number.Uint64() != state.LastBlockHeight+1 {
 		return fmt.Errorf("wrong Block.Header.Height. Expected %v, got %v",
 			state.LastBlockHeight+1,
 			block.Number,
@@ -45,20 +45,20 @@ func validateBlock(state ChainState, block *Block) error {
 	}
 
 	// Validate block LastCommit.
-	if block.Number == state.InitialHeight {
+	if block.Number.Uint64() == state.InitialHeight {
 		if len(block.LastCommit.Signatures) != 0 {
 			return errors.New("initial block can't have LastCommit signatures")
 		}
 	} else {
 		// LastCommit.Signatures length is checked in VerifyCommit.
 		if err := state.LastValidators.VerifyCommit(
-			state.ChainID, state.LastBlockID, block.Number-1, block.LastCommit); err != nil {
+			state.ChainID, state.LastBlockID, block.Number.Uint64()-1, block.LastCommit); err != nil {
 			return err
 		}
 	}
 
 	// Don't allow validator change within the epoch
-	if block.Number%state.Epoch != 0 && len(block.NextValidators) != 0 {
+	if block.Number.Uint64()%state.Epoch != 0 && len(block.NextValidators) != 0 {
 		return errors.New("cannot change validators within epoch")
 	}
 
@@ -74,7 +74,7 @@ func validateBlock(state ChainState, block *Block) error {
 
 	// Validate block Time
 	switch {
-	case block.Number > state.InitialHeight:
+	case block.Number.Uint64() > state.InitialHeight:
 		if block.TimeMs <= state.LastBlockTime {
 			return fmt.Errorf("block time %v not greater than last block time %v",
 				block.TimeMs,
@@ -89,7 +89,7 @@ func validateBlock(state ChainState, block *Block) error {
 			)
 		}
 
-	case block.Number == state.InitialHeight:
+	case block.Number.Uint64() == state.InitialHeight:
 		genesisTime := state.LastBlockTime
 		if block.TimeMs != genesisTime {
 			return fmt.Errorf("block time %v is not equal to genesis time %v",
@@ -222,7 +222,7 @@ func updateState(
 	return ChainState{
 		ChainID:         state.ChainID,
 		InitialHeight:   state.InitialHeight,
-		LastBlockHeight: header.Number,
+		LastBlockHeight: header.Number.Uint64(),
 		LastBlockID:     blockID,
 		LastBlockTime:   header.TimeMs,
 		NextValidators:  nValSet,

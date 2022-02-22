@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/chamber"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -29,14 +30,7 @@ var (
 
 var MaxSignatureSize = 65
 
-type Header struct {
-	ParentHash     common.Hash
-	Number         uint64
-	TimeMs         uint64
-	Coinbase       common.Address
-	NextValidators []common.Address
-	LastCommitHash common.Hash
-}
+type Header = types.Header
 
 type Block struct {
 	Header

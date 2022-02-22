@@ -1426,7 +1426,7 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 	// fail.Fail() // XXX
 
 	// Save to blockStore.
-	if cs.blockStore.Height() < block.Number {
+	if cs.blockStore.Height() < block.Number.Uint64() {
 		// NOTE: the seenCommit is local justification to commit this block,
 		// but may differ from the LastCommit included in the next block
 		precommits := cs.Votes.Precommits(cs.CommitRound)

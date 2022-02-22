@@ -1,6 +1,8 @@
 package consensus
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -119,7 +121,7 @@ func (state ChainState) MakeBlock(
 	block := &Block{
 		Header: Header{
 			ParentHash:     state.LastBlockID,
-			Number:         height,
+			Number:         big.NewInt(int64(height)),
 			TimeMs:         timestamp,
 			Coinbase:       proposerAddress,
 			LastCommitHash: commit.Hash(),

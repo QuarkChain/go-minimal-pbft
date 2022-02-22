@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -54,10 +55,13 @@ func TestSerdeBlock(t *testing.T) {
 	b := Block{
 		Header: Header{
 			ParentHash:     common.Hash{},
-			Number:         6,
+			Number:         big.NewInt(6),
 			TimeMs:         34534,
 			Coinbase:       common.Address{},
 			LastCommitHash: common.Hash{},
+			Difficulty:     big.NewInt(1),
+			Extra:          []byte{},
+			BaseFee:        big.NewInt(2), // TODO
 		},
 		Data:       []byte{},
 		LastCommit: cm,
