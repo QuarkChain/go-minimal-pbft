@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types/chamber"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -26,15 +27,15 @@ type MsgInfo struct {
 }
 
 // SignedMsgType is a type of signed message in the consensus.
-type SignedMsgType byte
+type SignedMsgType = chamber.SignedMsgType
 
 const (
-	UnknownType SignedMsgType = 0
+	UnknownType SignedMsgType = chamber.UnknownType
 	// Votes
-	PrevoteType   SignedMsgType = 1
-	PrecommitType SignedMsgType = 2
+	PrevoteType   SignedMsgType = chamber.PrevoteType
+	PrecommitType SignedMsgType = chamber.PrecommitType
 	// Proposals
-	ProposalType SignedMsgType = 32
+	ProposalType SignedMsgType = chamber.ProposalType
 )
 
 // IsVoteTypeValid returns true if t is a valid vote type.
@@ -46,27 +47,6 @@ func IsVoteTypeValid(t SignedMsgType) bool {
 		return false
 	}
 }
-
-// PrivValidator defines the functionality of a local Tendermint validator
-// that signs votes and proposals, and never double signs.
-type PrivValidator interface {
-	GetPubKey(context.Context) (PubKey, error)
-
-	SignVote(ctx context.Context, chainID string, vote *Vote) error
-	SignProposal(ctx context.Context, chainID string, proposal *Proposal) error
-}
-
-// PrivValidatorType defines the implemtation types.
-type PrivValidatorType uint8
-
-const (
-	MockSignerClient      = PrivValidatorType(0x00) // mock signer
-	FileSignerClient      = PrivValidatorType(0x01) // signer client via file
-	RetrySignerClient     = PrivValidatorType(0x02) // signer client with retry via socket
-	SignerSocketClient    = PrivValidatorType(0x03) // signer client via socket
-	ErrorMockSignerClient = PrivValidatorType(0x04) // error mock signer
-	SignerGRPCClient      = PrivValidatorType(0x05) // signer client via gRPC
-)
 
 type BlockStore interface {
 	Base() uint64   // first known contiguous block height
