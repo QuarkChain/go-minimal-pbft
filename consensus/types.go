@@ -7,15 +7,25 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-type Vote = chamber.Vote
-type VoteMessage = chamber.VoteMessage
-type VoteForSign = chamber.VoteForSign
-type Validator = chamber.Validator
-type ValidatorSet = chamber.ValidatorSet
+type (
+	Vote          = chamber.Vote
+	VoteMessage   = chamber.VoteMessage
+	VoteForSign   = chamber.VoteForSign
+	Validator     = chamber.Validator
+	ValidatorSet  = chamber.ValidatorSet
+	VoteSet       = chamber.VoteSet
+	HeightVoteSet = chamber.HeightVoteSet
 
-var NewValidatorSet = chamber.NewValidatorSet
+	ErrVoteConflictingVotes = chamber.ErrVoteConflictingVotes
+)
 
-var VerifyCommit = chamber.VerifyCommit
+var (
+	NewVoteSet                       = chamber.NewVoteSet
+	NewValidatorSet                  = chamber.NewValidatorSet
+	VerifyCommit                     = chamber.VerifyCommit
+	NewHeightVoteSet                 = chamber.NewHeightVoteSet
+	ErrVoteNonDeterministicSignature = chamber.ErrVoteNonDeterministicSignature
+)
 
 var MaxSignatureSize = 65
 
