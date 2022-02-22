@@ -160,3 +160,5 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	go.uber.org/zap v1.19.1
 )
+
+replace github.com/ethereum/go-ethereum => ../qkc-go-ethereum
