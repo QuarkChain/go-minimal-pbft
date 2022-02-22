@@ -3,15 +3,7 @@ package consensus
 import (
 	"errors"
 	"fmt"
-
-	"github.com/ethereum/go-ethereum/core/types/chamber"
 )
-
-type ValidatorSet = chamber.ValidatorSet
-
-var NewValidatorSet = chamber.NewValidatorSet
-
-var VerifyCommit = chamber.VerifyCommit
 
 type (
 	// ErrInvalidCommitHeight is returned when we encounter a commit with an

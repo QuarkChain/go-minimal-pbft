@@ -7,6 +7,16 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
+type Vote = chamber.Vote
+type VoteMessage = chamber.VoteMessage
+type VoteForSign = chamber.VoteForSign
+type Validator = chamber.Validator
+type ValidatorSet = chamber.ValidatorSet
+
+var NewValidatorSet = chamber.NewValidatorSet
+
+var VerifyCommit = chamber.VerifyCommit
+
 var MaxSignatureSize = 65
 
 type Header struct {

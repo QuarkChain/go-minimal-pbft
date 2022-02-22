@@ -1852,7 +1852,7 @@ func (cs *ConsensusState) signAddVote(ctx context.Context, msgType SignedMsgType
 	// TODO: pass pubKey to signVote
 	vote, err := cs.signVote(msgType, blockID)
 	if err == nil {
-		cs.sendInternalMessage(ctx, MsgInfo{&VoteMessage{vote}, ""})
+		cs.sendInternalMessage(ctx, MsgInfo{&VoteMessage{Vote: vote}, ""})
 		log.Debug("signed and pushed vote", "height", cs.Height, "round", cs.Round, "vote", vote)
 		return vote
 	}
