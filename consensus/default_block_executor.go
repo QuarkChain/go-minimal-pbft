@@ -26,39 +26,39 @@ func validateBlock(state ChainState, block *Block) error {
 
 	// Validate basic info.
 
-	if state.LastBlockHeight == 0 && block.Height != state.InitialHeight {
+	if state.LastBlockHeight == 0 && block.Number != state.InitialHeight {
 		return fmt.Errorf("wrong Block.Header.Height. Expected %v for initial block, got %v",
-			block.Height, state.InitialHeight)
+			block.Number, state.InitialHeight)
 	}
-	if state.LastBlockHeight > 0 && block.Height != state.LastBlockHeight+1 {
+	if state.LastBlockHeight > 0 && block.Number != state.LastBlockHeight+1 {
 		return fmt.Errorf("wrong Block.Header.Height. Expected %v, got %v",
 			state.LastBlockHeight+1,
-			block.Height,
+			block.Number,
 		)
 	}
 	// Validate prev block info.
-	if block.LastBlockID != state.LastBlockID {
+	if block.ParentHash != state.LastBlockID {
 		return fmt.Errorf("wrong Block.Header.LastBlockID.  Expected %v, got %v",
 			state.LastBlockID,
-			block.LastBlockID,
+			block.ParentHash,
 		)
 	}
 
 	// Validate block LastCommit.
-	if block.Height == state.InitialHeight {
+	if block.Number == state.InitialHeight {
 		if len(block.LastCommit.Signatures) != 0 {
 			return errors.New("initial block can't have LastCommit signatures")
 		}
 	} else {
 		// LastCommit.Signatures length is checked in VerifyCommit.
 		if err := state.LastValidators.VerifyCommit(
-			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
+			state.ChainID, state.LastBlockID, block.Number-1, block.LastCommit); err != nil {
 			return err
 		}
 	}
 
 	// Don't allow validator change within the epoch
-	if block.Height%state.Epoch != 0 && len(block.NextValidators) != 0 {
+	if block.Number%state.Epoch != 0 && len(block.NextValidators) != 0 {
 		return errors.New("cannot change validators within epoch")
 	}
 
@@ -66,15 +66,15 @@ func validateBlock(state ChainState, block *Block) error {
 	// know what round the block was first proposed. So just check that it's
 	// a legit address and a known validator.
 	// The length is checked in ValidateBasic above.
-	if !state.Validators.HasAddress(block.ProposerAddress) {
+	if !state.Validators.HasAddress(block.Coinbase) {
 		return fmt.Errorf("block.Header.ProposerAddress %X is not a validator",
-			block.ProposerAddress,
+			block.Coinbase,
 		)
 	}
 
 	// Validate block Time
 	switch {
-	case block.Height > state.InitialHeight:
+	case block.Number > state.InitialHeight:
 		if block.TimeMs <= state.LastBlockTime {
 			return fmt.Errorf("block time %v not greater than last block time %v",
 				block.TimeMs,
@@ -89,7 +89,7 @@ func validateBlock(state ChainState, block *Block) error {
 			)
 		}
 
-	case block.Height == state.InitialHeight:
+	case block.Number == state.InitialHeight:
 		genesisTime := state.LastBlockTime
 		if block.TimeMs != genesisTime {
 			return fmt.Errorf("block time %v is not equal to genesis time %v",
@@ -100,7 +100,7 @@ func validateBlock(state ChainState, block *Block) error {
 
 	default:
 		return fmt.Errorf("block height %v lower than initial height %v",
-			block.Height, state.InitialHeight)
+			block.Number, state.InitialHeight)
 	}
 
 	return nil
@@ -222,7 +222,7 @@ func updateState(
 	return ChainState{
 		ChainID:         state.ChainID,
 		InitialHeight:   state.InitialHeight,
-		LastBlockHeight: header.Height,
+		LastBlockHeight: header.Number,
 		LastBlockID:     blockID,
 		LastBlockTime:   header.TimeMs,
 		NextValidators:  nValSet,

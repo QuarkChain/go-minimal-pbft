@@ -118,11 +118,11 @@ func (state ChainState) MakeBlock(
 	// Build base block with block data.
 	block := &Block{
 		Header: Header{
-			LastBlockID:     state.LastBlockID,
-			Height:          height,
-			TimeMs:          timestamp,
-			ProposerAddress: proposerAddress,
-			LastCommitHash:  commit.Hash(),
+			ParentHash:     state.LastBlockID,
+			Number:         height,
+			TimeMs:         timestamp,
+			Coinbase:       proposerAddress,
+			LastCommitHash: commit.Hash(),
 		},
 		Data:       []byte{},
 		LastCommit: commit,

@@ -1426,7 +1426,7 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 	// fail.Fail() // XXX
 
 	// Save to blockStore.
-	if cs.blockStore.Height() < block.Height {
+	if cs.blockStore.Height() < block.Number {
 		// NOTE: the seenCommit is local justification to commit this block,
 		// but may differ from the LastCommit included in the next block
 		precommits := cs.Votes.Precommits(cs.CommitRound)
@@ -1434,7 +1434,7 @@ func (cs *ConsensusState) finalizeCommit(ctx context.Context, height uint64) {
 		cs.blockStore.SaveBlock(block, seenCommit)
 	} else {
 		// Happens during replay if we already saved the block but didn't commit
-		log.Debug("calling finalizeCommit on already stored block", "height", block.Height)
+		log.Debug("calling finalizeCommit on already stored block", "height", block.Number)
 	}
 
 	// fail.Fail() // XXX

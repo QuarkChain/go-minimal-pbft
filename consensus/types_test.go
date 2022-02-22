@@ -53,11 +53,11 @@ func TestSerdeBlock(t *testing.T) {
 
 	b := Block{
 		Header: Header{
-			LastBlockID:     common.Hash{},
-			Height:          6,
-			TimeMs:          34534,
-			ProposerAddress: common.Address{},
-			LastCommitHash:  common.Hash{},
+			ParentHash:     common.Hash{},
+			Number:         6,
+			TimeMs:         34534,
+			Coinbase:       common.Address{},
+			LastCommitHash: common.Hash{},
 		},
 		Data:       []byte{},
 		LastCommit: cm,

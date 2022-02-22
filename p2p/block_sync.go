@@ -77,7 +77,7 @@ func (bs *BlockSync) sync(ctx context.Context) error {
 		}
 
 		if err := bs.chainState.Validators.VerifyCommit(
-			bs.chainState.ChainID, vb.Hash(), vb.Height, vb.SeenCommit); err != nil {
+			bs.chainState.ChainID, vb.Hash(), vb.Number, vb.SeenCommit); err != nil {
 			return err
 		}
 

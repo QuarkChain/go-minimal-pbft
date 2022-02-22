@@ -30,12 +30,12 @@ var (
 var MaxSignatureSize = 65
 
 type Header struct {
-	LastBlockID     common.Hash
-	Height          uint64
-	TimeMs          uint64
-	ProposerAddress common.Address
-	NextValidators  []common.Address
-	LastCommitHash  common.Hash
+	ParentHash     common.Hash
+	Number         uint64
+	TimeMs         uint64
+	Coinbase       common.Address
+	NextValidators []common.Address
+	LastCommitHash common.Hash
 }
 
 type Block struct {
