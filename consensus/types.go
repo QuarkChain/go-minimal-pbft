@@ -31,19 +31,19 @@ var (
 	ErrVoteNonDeterministicSignature = chamber.ErrVoteNonDeterministicSignature
 )
 
-type Block struct {
+type FullBlock struct {
 	types.Block
 	LastCommit *Commit
 }
 
-func (b *Block) HashTo(hash common.Hash) bool {
+func (b *FullBlock) HashTo(hash common.Hash) bool {
 	if b == nil {
 		return false
 	}
 	return b.Hash() == hash
 }
 
-func (b *Block) EncodeRLP(w io.Writer) error {
+func (b *FullBlock) EncodeRLP(w io.Writer) error {
 	err := b.Block.EncodeRLP(w)
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func (b *Block) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, b.LastCommit)
 }
 
-func (b *Block) DecodeRLP(s *rlp.Stream) error {
+func (b *FullBlock) DecodeRLP(s *rlp.Stream) error {
 	err := b.Block.DecodeRLP(s)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 var MaxSignatureSize = 65
 
 type VerifiedBlock struct {
-	Block
+	FullBlock
 	SeenCommit *Commit // not necessarily the LastCommit of next block, but enough to check the validity of the block
 }
 

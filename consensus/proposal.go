@@ -39,12 +39,12 @@ type Proposal struct {
 	BlockID     common.Hash `json:"block_id"`
 	TimestampMs int64       `json:"timestamp"` // unix ms
 	Signature   []byte      `json:"signature"`
-	Block       *Block
+	Block       *FullBlock
 }
 
 // NewProposal returns a new Proposal.
 // If there is no POLRound, polRound should be -1.
-func NewProposal(height uint64, round int32, polRound int32, blockID common.Hash, block *Block) *Proposal {
+func NewProposal(height uint64, round int32, polRound int32, blockID common.Hash, block *FullBlock) *Proposal {
 	return &Proposal{
 		Height:      height,
 		Round:       round,
@@ -165,6 +165,6 @@ func (p *Proposal) DecodeRLP(s *rlp.Stream) error {
 	p.TimestampMs = int64(pr.Timestamp)
 	p.Signature = pr.Signature
 
-	p.Block = &Block{}
+	p.Block = &FullBlock{}
 	return p.Block.DecodeRLP(s)
 }

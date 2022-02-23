@@ -72,7 +72,7 @@ func (bs *BlockSync) sync(ctx context.Context) error {
 			return err
 		}
 
-		if err := bs.executor.ValidateBlock(bs.chainState, &vb.Block); err != nil {
+		if err := bs.executor.ValidateBlock(bs.chainState, &vb.FullBlock); err != nil {
 			return err
 		}
 
@@ -81,12 +81,12 @@ func (bs *BlockSync) sync(ctx context.Context) error {
 			return err
 		}
 
-		newChainState, err := bs.executor.ApplyBlock(ctx, bs.chainState, &vb.Block)
+		newChainState, err := bs.executor.ApplyBlock(ctx, bs.chainState, &vb.FullBlock)
 		if err != nil {
 			return err
 		}
 
-		bs.blockStore.SaveBlock(&vb.Block, vb.SeenCommit)
+		bs.blockStore.SaveBlock(&vb.FullBlock, vb.SeenCommit)
 		bs.chainState = newChainState
 	}
 

@@ -53,16 +53,16 @@ type BlockStore interface {
 	Height() uint64 // last known contiguous block height
 	Size() uint64   // return number of blocks in the store
 
-	LoadBlock(height uint64) *Block
+	LoadBlock(height uint64) *FullBlock
 	LoadBlockCommit(height uint64) *Commit
 	LoadSeenCommit() *Commit
 
-	SaveBlock(*Block, *Commit)
+	SaveBlock(*FullBlock, *Commit)
 }
 
 type BlockExecutor interface {
-	ValidateBlock(ChainState, *Block) error                             // validate the block by tentatively executing it
-	ApplyBlock(context.Context, ChainState, *Block) (ChainState, error) // apply the block
+	ValidateBlock(ChainState, *FullBlock) error                             // validate the block by tentatively executing it
+	ApplyBlock(context.Context, ChainState, *FullBlock) (ChainState, error) // apply the block
 }
 
 // Consensus sentinel errors
@@ -135,7 +135,7 @@ type ConsensusState struct {
 		height uint64,
 		commit *Commit,
 		proposerAddr common.Address,
-	) *Block
+	) *FullBlock
 
 	// closed when we finish shutting down
 	done chan struct{}
@@ -193,7 +193,7 @@ func NewConsensusState(
 	return cs
 }
 
-func (cs *ConsensusState) defaultCreateBlock(height uint64, commit *Commit, proposerAddr common.Address) *Block {
+func (cs *ConsensusState) defaultCreateBlock(height uint64, commit *Commit, proposerAddr common.Address) *FullBlock {
 	return cs.chainState.MakeBlock(height, commit, proposerAddr)
 }
 
@@ -992,7 +992,7 @@ func (cs *ConsensusState) isProposer(address common.Address) bool {
 }
 
 func (cs *ConsensusState) defaultDecideProposal(height uint64, round int32) {
-	var block *Block
+	var block *FullBlock
 
 	// Decide on block
 	if cs.ValidBlock != nil {
@@ -1052,7 +1052,7 @@ func (cs *ConsensusState) isProposalComplete() bool {
 //
 // NOTE: keep it side-effect free for clarity.
 // CONTRACT: cs.privValidator is not nil.
-func (cs *ConsensusState) createProposalBlock() (block *Block) {
+func (cs *ConsensusState) createProposalBlock() (block *FullBlock) {
 	if cs.privValidator == nil {
 		panic("entered createProposalBlock with privValidator being nil")
 	}

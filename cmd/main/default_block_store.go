@@ -44,7 +44,7 @@ func (bs *DefaultBlockStore) Size() uint64 {
 	return height + 1 - bs.Base()
 }
 
-func (bs *DefaultBlockStore) LoadBlock(height uint64) *consensus.Block {
+func (bs *DefaultBlockStore) LoadBlock(height uint64) *consensus.FullBlock {
 	hd := make([]byte, 8)
 	binary.BigEndian.PutUint64(hd, height)
 	bk := []byte("block")
@@ -55,7 +55,7 @@ func (bs *DefaultBlockStore) LoadBlock(height uint64) *consensus.Block {
 		return nil
 	}
 
-	b := &consensus.Block{}
+	b := &consensus.FullBlock{}
 	if rlp.DecodeBytes(blockData, b) != nil {
 		panic(fmt.Errorf("error from block: %w", err))
 	}
@@ -80,7 +80,7 @@ func (bs *DefaultBlockStore) LoadBlockCommit(height uint64) *consensus.Commit {
 	return c
 }
 
-func (bs *DefaultBlockStore) SaveBlock(b *consensus.Block, c *consensus.Commit) {
+func (bs *DefaultBlockStore) SaveBlock(b *consensus.FullBlock, c *consensus.Commit) {
 	// sanity check?
 	if b.NumberU64() != bs.Height()+1 {
 		panic(fmt.Sprintf("BlockStore can only save contiguous blocks. Wanted %v, got %v", bs.Height()+1, b.NumberU64()))

@@ -18,11 +18,11 @@ func NewDefaultBlockExecutor(db *leveldb.DB) BlockExecutor {
 	return &DefaultBlockExecutor{}
 }
 
-func (be *DefaultBlockExecutor) ValidateBlock(state ChainState, b *Block) error {
+func (be *DefaultBlockExecutor) ValidateBlock(state ChainState, b *FullBlock) error {
 	return validateBlock(state, b)
 }
 
-func validateBlock(state ChainState, block *Block) error {
+func validateBlock(state ChainState, block *FullBlock) error {
 
 	// Validate basic info.
 
@@ -164,7 +164,7 @@ func weightedMedian(weightedTimes []*weightedTime, totalVotingPower int64) (res 
 	return
 }
 
-func (be *DefaultBlockExecutor) ApplyBlock(ctx context.Context, state ChainState, block *Block) (ChainState, error) {
+func (be *DefaultBlockExecutor) ApplyBlock(ctx context.Context, state ChainState, block *FullBlock) (ChainState, error) {
 	// TOOD: execute the block & new validator change
 	// Update the state with the block and responses.
 	state, err := updateState(state, block.Hash(), block, []common.Address{})
@@ -178,7 +178,7 @@ func (be *DefaultBlockExecutor) ApplyBlock(ctx context.Context, state ChainState
 func updateState(
 	state ChainState,
 	blockID common.Hash,
-	block *Block,
+	block *FullBlock,
 	nextValidators []common.Address,
 ) (ChainState, error) {
 

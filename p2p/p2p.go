@@ -470,7 +470,7 @@ func NewP2PServer(
 
 		// TODO: check height correctness
 		vb := &consensus.VerifiedBlock{
-			Block:      *blockStore.LoadBlock(msg.Height),
+			FullBlock:  *blockStore.LoadBlock(msg.Height),
 			SeenCommit: blockStore.LoadBlockCommit(msg.Height),
 		}
 

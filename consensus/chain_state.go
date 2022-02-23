@@ -109,7 +109,7 @@ func (state ChainState) MakeBlock(
 	commit *Commit,
 	// evidence []types.Evidence,
 	proposerAddress common.Address,
-) *Block {
+) *FullBlock {
 
 	// Set time.
 	var timestamp uint64
@@ -120,7 +120,7 @@ func (state ChainState) MakeBlock(
 	}
 
 	// Build base block with block data.
-	block := &Block{
+	block := &FullBlock{
 		Block: *types.NewBlock(
 			&Header{
 				ParentHash:     state.LastBlockID,

@@ -28,7 +28,7 @@ func TestSerdeProposal(t *testing.T) {
 		TimestampMs: time.Now().UnixMilli(),
 		BlockID:     common.Hash{},
 		Signature:   []byte{'1'},
-		Block: &consensus.Block{Block: *types.NewBlock(
+		Block: &consensus.FullBlock{Block: *types.NewBlock(
 			&consensus.Header{
 				ParentHash:     common.Hash{},
 				Number:         big.NewInt(6),

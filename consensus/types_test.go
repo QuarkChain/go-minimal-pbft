@@ -55,7 +55,7 @@ func TestSerdeBlock(t *testing.T) {
 	}
 	cm := NewCommit(5, 6, common.Hash{}, []CommitSig{c})
 
-	b := &Block{Block: *types.NewBlock(
+	b := &FullBlock{Block: *types.NewBlock(
 		&Header{
 			ParentHash:     common.Hash{},
 			Number:         big.NewInt(6),
@@ -77,7 +77,7 @@ func TestSerdeBlock(t *testing.T) {
 	var buf bytes.Buffer
 	err := b.EncodeRLP(&buf)
 	assert.NoError(t, err)
-	nb := Block{}
+	nb := FullBlock{}
 	bs := buf.Bytes()
 	err = nb.DecodeRLP(rlp.NewStream(bytes.NewReader(bs), 0))
 	assert.NoError(t, err)

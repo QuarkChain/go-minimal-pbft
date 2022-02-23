@@ -17,13 +17,13 @@ type RoundState struct {
 	CommitTime    time.Time     `json:"commit_time"`
 	Validators    *ValidatorSet `json:"validators"`
 	Proposal      *Proposal     `json:"proposal"`
-	ProposalBlock *Block        `json:"proposal_block"`
+	ProposalBlock *FullBlock    `json:"proposal_block"`
 	LockedRound   int32         `json:"locked_round"`
-	LockedBlock   *Block        `json:"locked_block"`
+	LockedBlock   *FullBlock    `json:"locked_block"`
 
 	// Last known round with POL for non-nil valid block.
-	ValidRound int32  `json:"valid_round"`
-	ValidBlock *Block `json:"valid_block"` // Last known block of POL mentioned above.
+	ValidRound int32      `json:"valid_round"`
+	ValidBlock *FullBlock `json:"valid_block"` // Last known block of POL mentioned above.
 
 	// Last known block parts of POL mentioned above.
 	Votes                     *HeightVoteSet `json:"votes"`
