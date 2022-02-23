@@ -1013,8 +1013,7 @@ func (cs *ConsensusState) defaultDecideProposal(height uint64, round int32) {
 	// }
 
 	// Make proposal
-	propBlockID := block.Hash()
-	proposal := NewProposal(height, round, cs.ValidRound, propBlockID, block)
+	proposal := NewProposal(height, round, cs.ValidRound, block)
 
 	// wait the max amount we would wait for a proposal
 	ctx, cancel := context.WithTimeout(context.TODO(), cs.config.TimeoutPropose)

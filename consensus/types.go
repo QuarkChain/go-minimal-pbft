@@ -9,7 +9,6 @@ import (
 type (
 	Vote          = types.Vote
 	VoteMessage   = types.VoteMessage
-	VoteForSign   = types.VoteForSign
 	Validator     = types.Validator
 	ValidatorSet  = types.ValidatorSet
 	VoteSet       = types.VoteSet
@@ -20,7 +19,6 @@ type (
 	BlockIDFlag     = types.BlockIDFlag
 	CommitSig       = types.CommitSig
 	Proposal        = types.Proposal
-	ProposalForSign = types.ProposalForSign
 	ProposalMessage = types.ProposalMessage
 
 	Header = types.Header
