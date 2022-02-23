@@ -125,6 +125,7 @@ func (state ChainState) MakeBlock(
 			&Header{
 				ParentHash:     state.LastBlockID,
 				Number:         big.NewInt(int64(height)),
+				Time:           timestamp / 1000,
 				TimeMs:         timestamp,
 				Coinbase:       proposerAddress,
 				LastCommitHash: commit.Hash(),
