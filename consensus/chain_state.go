@@ -120,19 +120,20 @@ func (state ChainState) MakeBlock(
 	}
 
 	// Build base block with block data.
-	block := types.NewBlock(
-		&Header{
-			ParentHash:     state.LastBlockID,
-			Number:         big.NewInt(int64(height)),
-			TimeMs:         timestamp,
-			Coinbase:       proposerAddress,
-			LastCommitHash: commit.Hash(),
-			Difficulty:     big.NewInt(int64(height)),
-			Extra:          []byte{},
-			BaseFee:        big.NewInt(0), // TODO: update base fee
-		},
-		nil, nil, nil, trie.NewStackTrie(nil),
-	)
+	block := &Block{
+		Block: *types.NewBlock(
+			&Header{
+				ParentHash:     state.LastBlockID,
+				Number:         big.NewInt(int64(height)),
+				TimeMs:         timestamp,
+				Coinbase:       proposerAddress,
+				LastCommitHash: commit.Hash(),
+				Difficulty:     big.NewInt(int64(height)),
+				Extra:          []byte{},
+				BaseFee:        big.NewInt(0), // TODO: update base fee
+			},
+			nil, nil, nil, trie.NewStackTrie(nil),
+		), LastCommit: commit}
 
 	return block
 }

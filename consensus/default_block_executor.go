@@ -28,12 +28,12 @@ func validateBlock(state ChainState, block *Block) error {
 
 	if state.LastBlockHeight == 0 && block.NumberU64() != state.InitialHeight {
 		return fmt.Errorf("wrong Block.Header.Height. Expected %v for initial block, got %v",
-			block.Number, state.InitialHeight)
+			block.NumberU64(), state.InitialHeight)
 	}
 	if state.LastBlockHeight > 0 && block.NumberU64() != state.LastBlockHeight+1 {
 		return fmt.Errorf("wrong Block.Header.Height. Expected %v, got %v",
 			state.LastBlockHeight+1,
-			block.Number,
+			block.NumberU64(),
 		)
 	}
 	// Validate prev block info.
@@ -58,7 +58,7 @@ func validateBlock(state ChainState, block *Block) error {
 	}
 
 	// Don't allow validator change within the epoch
-	if block.NumberU64()%state.Epoch != 0 && block.IsNextValidatorsEmpty() {
+	if block.NumberU64()%state.Epoch != 0 && len(block.NextValidators()) != 0 {
 		return errors.New("cannot change validators within epoch")
 	}
 
@@ -68,7 +68,7 @@ func validateBlock(state ChainState, block *Block) error {
 	// The length is checked in ValidateBasic above.
 	if !state.Validators.HasAddress(block.Coinbase()) {
 		return fmt.Errorf("block.Header.ProposerAddress %X is not a validator",
-			block.Coinbase,
+			block.Coinbase(),
 		)
 	}
 
@@ -104,7 +104,7 @@ func validateBlock(state ChainState, block *Block) error {
 
 	default:
 		return fmt.Errorf("block height %v lower than initial height %v",
-			block.Number, state.InitialHeight)
+			block.NumberU64(), state.InitialHeight)
 	}
 
 	return nil

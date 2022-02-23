@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -50,16 +51,6 @@ var (
 		}, []string{"type"})
 	decoder = make(map[byte]func([]byte) (interface{}, error))
 )
-
-type ProposalRaw struct {
-	Height    uint64
-	Round     uint32
-	POLRound  uint32
-	BlockID   common.Hash
-	Timestamp uint64
-	Signature []byte
-	Block     *consensus.Block
-}
 
 const (
 	MsgProposal        = 0x01
@@ -162,39 +153,21 @@ func encodeVote(v *consensus.Vote) ([]byte, error) {
 	return rlp.EncodeToBytes(vr)
 }
 
-func (p *ProposalRaw) toProposal() (*consensus.Proposal, error) {
-	cp := &consensus.Proposal{
-		Height:      p.Height,
-		Round:       int32(p.Round),
-		POLRound:    int32(p.POLRound),
-		BlockID:     p.BlockID,
-		TimestampMs: int64(p.Timestamp),
-		Signature:   p.Signature,
-		Block:       p.Block,
-	}
-	return cp, cp.ValidateBasic()
-}
-
 func decodeProposal(data []byte) (interface{}, error) {
-	var p ProposalRaw
-	err := rlp.DecodeBytes(data, &p)
+	p := &consensus.Proposal{}
+	err := p.DecodeRLP(rlp.NewStream(bytes.NewReader(data), 0))
 	if err != nil {
 		return nil, err
 	}
-	return p.toProposal()
+	return p, p.ValidateBasic()
 }
 
 func encodeProposal(p *consensus.Proposal) ([]byte, error) {
-	pr := &ProposalRaw{
-		Height:    uint64(p.Height),
-		Round:     uint32(p.Round),
-		POLRound:  uint32(p.POLRound),
-		BlockID:   p.BlockID,
-		Timestamp: uint64(p.TimestampMs),
-		Signature: p.Signature,
-		Block:     p.Block,
+	var buf bytes.Buffer
+	if err := p.EncodeRLP(&buf); err != nil {
+		return nil, err
 	}
-	return rlp.EncodeToBytes(pr)
+	return buf.Bytes(), nil
 }
 
 func decodeVote(data []byte) (interface{}, error) {

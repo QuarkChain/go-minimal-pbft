@@ -3,6 +3,7 @@ package consensus
 import (
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -124,4 +125,46 @@ func (p *Proposal) ValidateBasic() error {
 	// 	return fmt.Errorf("signature is too big (max: %d)", MaxSignatureSize)
 	// }
 	return nil
+}
+
+// block will be append to end of stream
+type ProposalRaw struct {
+	Height    uint64
+	Round     uint32
+	POLRound  uint32
+	BlockID   common.Hash
+	Timestamp uint64
+	Signature []byte
+}
+
+func (p *Proposal) EncodeRLP(w io.Writer) error {
+	if err := rlp.Encode(w, ProposalRaw{
+		Height:    uint64(p.Height),
+		Round:     uint32(p.Round),
+		POLRound:  uint32(p.POLRound),
+		BlockID:   p.BlockID,
+		Timestamp: uint64(p.TimestampMs),
+		Signature: p.Signature,
+	}); err != nil {
+		return err
+	}
+
+	return p.Block.EncodeRLP(w)
+}
+
+func (p *Proposal) DecodeRLP(s *rlp.Stream) error {
+	var pr ProposalRaw
+	if err := s.Decode(&pr); err != nil {
+		return err
+	}
+
+	p.Height = pr.Height
+	p.Round = int32(pr.Round)
+	p.POLRound = int32(pr.POLRound)
+	p.BlockID = pr.BlockID
+	p.TimestampMs = int64(pr.Timestamp)
+	p.Signature = pr.Signature
+
+	p.Block = &Block{}
+	return p.Block.DecodeRLP(s)
 }

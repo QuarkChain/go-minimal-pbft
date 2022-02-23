@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/go-minimal-pbft/consensus"
 	"github.com/stretchr/testify/assert"
 )
@@ -26,8 +28,8 @@ func TestSerdeProposal(t *testing.T) {
 		TimestampMs: time.Now().UnixMilli(),
 		BlockID:     common.Hash{},
 		Signature:   []byte{'1'},
-		Block: &consensus.Block{
-			Header: consensus.Header{
+		Block: &consensus.Block{Block: *types.NewBlock(
+			&consensus.Header{
 				ParentHash:     common.Hash{},
 				Number:         big.NewInt(6),
 				TimeMs:         34534,
@@ -36,17 +38,21 @@ func TestSerdeProposal(t *testing.T) {
 				Difficulty:     big.NewInt(2),
 				Extra:          []byte{},
 				BaseFee:        big.NewInt(7),
+				NextValidators: []common.Address{},
 			},
-			Data:       []byte{},
+			[]*types.Transaction{},
+			[]*types.Header{},
+			[]*types.Receipt{},
+			trie.NewStackTrie(nil),
+		),
 			LastCommit: cm,
-		},
-	}
+		}}
 
 	data, err := encodeProposal(p)
 	assert.NoError(t, err)
 	np, err := decodeProposal(data)
 	assert.NoError(t, err)
-	assert.Equal(t, p, np)
+	assert.Equal(t, p.Block.Hash(), np.(*consensus.Proposal).Block.Hash())
 }
 
 func TestSerdeVote(t *testing.T) {

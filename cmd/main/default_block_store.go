@@ -83,7 +83,7 @@ func (bs *DefaultBlockStore) LoadBlockCommit(height uint64) *consensus.Commit {
 func (bs *DefaultBlockStore) SaveBlock(b *consensus.Block, c *consensus.Commit) {
 	// sanity check?
 	if b.NumberU64() != bs.Height()+1 {
-		panic(fmt.Sprintf("BlockStore can only save contiguous blocks. Wanted %v, got %v", bs.Height()+1, b.Number))
+		panic(fmt.Sprintf("BlockStore can only save contiguous blocks. Wanted %v, got %v", bs.Height()+1, b.NumberU64()))
 	}
 
 	hd := make([]byte, 8)

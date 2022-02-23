@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"math/big"
 	"testing"
@@ -54,7 +55,7 @@ func TestSerdeBlock(t *testing.T) {
 	}
 	cm := NewCommit(5, 6, common.Hash{}, []CommitSig{c})
 
-	b := types.NewBlock(
+	b := &Block{Block: *types.NewBlock(
 		&Header{
 			ParentHash:     common.Hash{},
 			Number:         big.NewInt(6),
@@ -64,18 +65,25 @@ func TestSerdeBlock(t *testing.T) {
 			Difficulty:     big.NewInt(1),
 			Extra:          []byte{},
 			BaseFee:        big.NewInt(2), // TODO
+			NextValidators: []common.Address{},
 		},
-		nil, nil, nil, trie.NewStackTrie(nil),
-	)
-	b.LastCommit = cm
+		[]*types.Transaction{},
+		[]*types.Header{},
+		[]*types.Receipt{},
+		trie.NewStackTrie(nil)),
+		LastCommit: cm,
+	}
 
-	data, err := rlp.EncodeToBytes(b)
+	var buf bytes.Buffer
+	err := b.EncodeRLP(&buf)
 	assert.NoError(t, err)
 	nb := Block{}
-	err = rlp.DecodeBytes(data, &nb)
+	bs := buf.Bytes()
+	err = nb.DecodeRLP(rlp.NewStream(bytes.NewReader(bs), 0))
 	assert.NoError(t, err)
-	assert.Equal(t, b, nb)
 	assert.Equal(t, b.Hash(), nb.Hash())
+	// assert.Equal(t, b.Body(), nb.Body())
+	assert.Equal(t, b.LastCommit, nb.LastCommit)
 }
 
 func TestVoteSignBytes(t *testing.T) {

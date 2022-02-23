@@ -1,8 +1,12 @@
 package consensus
 
 import (
+	"io"
+
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/chamber"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 type (
@@ -15,7 +19,6 @@ type (
 	HeightVoteSet = chamber.HeightVoteSet
 
 	Header = types.Header
-	Block  = types.Block
 
 	ErrVoteConflictingVotes = chamber.ErrVoteConflictingVotes
 )
@@ -27,6 +30,44 @@ var (
 	NewHeightVoteSet                 = chamber.NewHeightVoteSet
 	ErrVoteNonDeterministicSignature = chamber.ErrVoteNonDeterministicSignature
 )
+
+type Block struct {
+	types.Block
+	LastCommit *Commit
+}
+
+func (b *Block) HashTo(hash common.Hash) bool {
+	if b == nil {
+		return false
+	}
+	return b.Hash() == hash
+}
+
+func (b *Block) EncodeRLP(w io.Writer) error {
+	err := b.Block.EncodeRLP(w)
+	if err != nil {
+		return err
+	}
+	return rlp.Encode(w, b.LastCommit)
+}
+
+func (b *Block) DecodeRLP(s *rlp.Stream) error {
+	err := b.Block.DecodeRLP(s)
+	if err != nil {
+		return err
+	}
+	b.LastCommit = &chamber.Commit{}
+	return s.Decode(&b.LastCommit)
+}
+
+// func NewBlock(header *types.Header, body *types.Body, lastCommit *Commit) *Block {
+// 	header.LastCommitHash = lastCommit.Hash()
+// 	return &Block{Header: header, Body: body, LastCommit: lastCommit}
+// }
+
+// func (b *Block) NumberU64() uint64 {
+// 	return b.Header.Number.Uint64()
+// }
 
 var MaxSignatureSize = 65
 
