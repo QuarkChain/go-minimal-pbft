@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types/chamber"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -27,15 +27,15 @@ type MsgInfo struct {
 }
 
 // SignedMsgType is a type of signed message in the consensus.
-type SignedMsgType = chamber.SignedMsgType
+type SignedMsgType = types.SignedMsgType
 
 const (
-	UnknownType SignedMsgType = chamber.UnknownType
+	UnknownType SignedMsgType = types.UnknownType
 	// Votes
-	PrevoteType   SignedMsgType = chamber.PrevoteType
-	PrecommitType SignedMsgType = chamber.PrecommitType
+	PrevoteType   SignedMsgType = types.PrevoteType
+	PrecommitType SignedMsgType = types.PrecommitType
 	// Proposals
-	ProposalType SignedMsgType = chamber.ProposalType
+	ProposalType SignedMsgType = types.ProposalType
 )
 
 // IsVoteTypeValid returns true if t is a valid vote type.

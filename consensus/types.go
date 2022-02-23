@@ -4,48 +4,47 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/types/chamber"
 )
 
 type (
-	Vote          = chamber.Vote
-	VoteMessage   = chamber.VoteMessage
-	VoteForSign   = chamber.VoteForSign
-	Validator     = chamber.Validator
-	ValidatorSet  = chamber.ValidatorSet
-	VoteSet       = chamber.VoteSet
-	HeightVoteSet = chamber.HeightVoteSet
-	FullBlock     = chamber.FullBlock
-	Commit        = chamber.Commit
+	Vote          = types.Vote
+	VoteMessage   = types.VoteMessage
+	VoteForSign   = types.VoteForSign
+	Validator     = types.Validator
+	ValidatorSet  = types.ValidatorSet
+	VoteSet       = types.VoteSet
+	HeightVoteSet = types.HeightVoteSet
+	FullBlock     = types.FullBlock
+	Commit        = types.Commit
 	// BlockIDFlag indicates which BlockID the signature is for.
-	BlockIDFlag     = chamber.BlockIDFlag
-	CommitSig       = chamber.CommitSig
-	Proposal        = chamber.Proposal
-	ProposalForSign = chamber.ProposalForSign
-	ProposalMessage = chamber.ProposalMessage
+	BlockIDFlag     = types.BlockIDFlag
+	CommitSig       = types.CommitSig
+	Proposal        = types.Proposal
+	ProposalForSign = types.ProposalForSign
+	ProposalMessage = types.ProposalMessage
 
 	Header = types.Header
 
-	ErrVoteConflictingVotes = chamber.ErrVoteConflictingVotes
+	ErrVoteConflictingVotes = types.ErrVoteConflictingVotes
 )
 
 var (
-	NewVoteSet                       = chamber.NewVoteSet
-	NewValidatorSet                  = chamber.NewValidatorSet
-	VerifyCommit                     = chamber.VerifyCommit
-	NewHeightVoteSet                 = chamber.NewHeightVoteSet
-	ErrVoteNonDeterministicSignature = chamber.ErrVoteNonDeterministicSignature
+	NewVoteSet                       = types.NewVoteSet
+	NewValidatorSet                  = types.NewValidatorSet
+	VerifyCommit                     = types.VerifyCommit
+	NewHeightVoteSet                 = types.NewHeightVoteSet
+	ErrVoteNonDeterministicSignature = types.ErrVoteNonDeterministicSignature
 	// BlockIDFlagAbsent - no vote was received from a validator.
-	BlockIDFlagAbsent BlockIDFlag = chamber.BlockIDFlagAbsent
+	BlockIDFlagAbsent BlockIDFlag = types.BlockIDFlagAbsent
 	// BlockIDFlagCommit - voted for the Commit.BlockID.
-	BlockIDFlagCommit = chamber.BlockIDFlagCommit
+	BlockIDFlagCommit = types.BlockIDFlagCommit
 	// BlockIDFlagNil - voted for nil.
-	BlockIDFlagNil = chamber.BlockIDFlagAbsent
+	BlockIDFlagNil = types.BlockIDFlagAbsent
 
-	NewCommit          = chamber.NewCommit
-	CommitToVoteSet    = chamber.CommitToVoteSet
-	NewProposal        = chamber.NewProposal
-	NewCommitSigAbsent = chamber.NewCommitSigAbsent
+	NewCommit          = types.NewCommit
+	CommitToVoteSet    = types.CommitToVoteSet
+	NewProposal        = types.NewProposal
+	NewCommitSigAbsent = types.NewCommitSigAbsent
 )
 
 // func NewBlock(header *types.Header, body *types.Body, lastCommit *Commit) *Block {
