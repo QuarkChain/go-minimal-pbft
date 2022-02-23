@@ -125,32 +125,21 @@ type VoteRaw struct {
 	Signature        []byte
 }
 
-func (v *VoteRaw) toVote() (*consensus.Vote, error) {
-	cv := &consensus.Vote{
-		Type:             consensus.SignedMsgType(v.Type),
-		Height:           v.Height,
-		Round:            int32(v.Round),
-		BlockID:          v.BlockID,
-		TimestampMs:      v.Timestamp,
-		ValidatorAddress: v.ValidatorAddress,
-		ValidatorIndex:   int32(v.ValidatorIndex),
-		Signature:        v.Signature,
+func decodeVote(data []byte) (interface{}, error) {
+	v := &consensus.Vote{}
+	err := v.DecodeRLP(rlp.NewStream(bytes.NewReader(data), 0))
+	if err != nil {
+		return nil, err
 	}
-	return cv, cv.ValidateBasic()
+	return v, v.ValidateBasic()
 }
 
 func encodeVote(v *consensus.Vote) ([]byte, error) {
-	vr := &VoteRaw{
-		Type:             uint32(v.Type),
-		Height:           uint64(v.Height),
-		Round:            uint32(v.Round),
-		BlockID:          v.BlockID,
-		Timestamp:        uint64(v.TimestampMs),
-		ValidatorAddress: v.ValidatorAddress,
-		ValidatorIndex:   uint32(v.ValidatorIndex),
-		Signature:        v.Signature,
+	var buf bytes.Buffer
+	if err := v.EncodeRLP(&buf); err != nil {
+		return nil, err
 	}
-	return rlp.EncodeToBytes(vr)
+	return buf.Bytes(), nil
 }
 
 func decodeProposal(data []byte) (interface{}, error) {
@@ -168,15 +157,6 @@ func encodeProposal(p *consensus.Proposal) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-func decodeVote(data []byte) (interface{}, error) {
-	var v VoteRaw
-	err := rlp.DecodeBytes(data, &v)
-	if err != nil {
-		return nil, err
-	}
-	return v.toVote()
 }
 
 func decodeVerifiedBlock(data []byte) (interface{}, error) {
