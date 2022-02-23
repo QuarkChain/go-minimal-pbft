@@ -1,12 +1,10 @@
 package consensus
 
 import (
-	"io"
+	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/chamber"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 type (
@@ -17,6 +15,14 @@ type (
 	ValidatorSet  = chamber.ValidatorSet
 	VoteSet       = chamber.VoteSet
 	HeightVoteSet = chamber.HeightVoteSet
+	FullBlock     = chamber.FullBlock
+	Commit        = chamber.Commit
+	// BlockIDFlag indicates which BlockID the signature is for.
+	BlockIDFlag     = chamber.BlockIDFlag
+	CommitSig       = chamber.CommitSig
+	Proposal        = chamber.Proposal
+	ProposalForSign = chamber.ProposalForSign
+	ProposalMessage = chamber.ProposalMessage
 
 	Header = types.Header
 
@@ -29,44 +35,22 @@ var (
 	VerifyCommit                     = chamber.VerifyCommit
 	NewHeightVoteSet                 = chamber.NewHeightVoteSet
 	ErrVoteNonDeterministicSignature = chamber.ErrVoteNonDeterministicSignature
+	// BlockIDFlagAbsent - no vote was received from a validator.
+	BlockIDFlagAbsent BlockIDFlag = chamber.BlockIDFlagAbsent
+	// BlockIDFlagCommit - voted for the Commit.BlockID.
+	BlockIDFlagCommit = chamber.BlockIDFlagCommit
+	// BlockIDFlagNil - voted for nil.
+	BlockIDFlagNil = chamber.BlockIDFlagAbsent
+
+	NewCommit          = chamber.NewCommit
+	CommitToVoteSet    = chamber.CommitToVoteSet
+	NewProposal        = chamber.NewProposal
+	NewCommitSigAbsent = chamber.NewCommitSigAbsent
 )
-
-type FullBlock struct {
-	types.Block
-	LastCommit *Commit
-}
-
-func (b *FullBlock) HashTo(hash common.Hash) bool {
-	if b == nil {
-		return false
-	}
-	return b.Hash() == hash
-}
-
-func (b *FullBlock) EncodeRLP(w io.Writer) error {
-	err := b.Block.EncodeRLP(w)
-	if err != nil {
-		return err
-	}
-	return rlp.Encode(w, b.LastCommit)
-}
-
-func (b *FullBlock) DecodeRLP(s *rlp.Stream) error {
-	err := b.Block.DecodeRLP(s)
-	if err != nil {
-		return err
-	}
-	b.LastCommit = &chamber.Commit{}
-	return s.Decode(&b.LastCommit)
-}
 
 // func NewBlock(header *types.Header, body *types.Body, lastCommit *Commit) *Block {
 // 	header.LastCommitHash = lastCommit.Hash()
 // 	return &Block{Header: header, Body: body, LastCommit: lastCommit}
-// }
-
-// func (b *Block) NumberU64() uint64 {
-// 	return b.Header.Number.Uint64()
 // }
 
 var MaxSignatureSize = 65
@@ -76,22 +60,18 @@ type VerifiedBlock struct {
 	SeenCommit *Commit // not necessarily the LastCommit of next block, but enough to check the validity of the block
 }
 
-type Commit = chamber.Commit
+// Now returns the current time in UTC with no monotonic component.
+func CanonicalNow() time.Time {
+	return Canonical(time.Now())
+}
 
-var NewCommit = chamber.NewCommit
-var CommitToVoteSet = chamber.CommitToVoteSet
+func CanonicalNowMs() int64 {
+	return time.Now().UnixMilli()
+}
 
-// BlockIDFlag indicates which BlockID the signature is for.
-type BlockIDFlag = chamber.BlockIDFlag
-type CommitSig = chamber.CommitSig
-
-var NewCommitSigAbsent = chamber.NewCommitSigAbsent
-
-const (
-	// BlockIDFlagAbsent - no vote was received from a validator.
-	BlockIDFlagAbsent BlockIDFlag = chamber.BlockIDFlagAbsent
-	// BlockIDFlagCommit - voted for the Commit.BlockID.
-	BlockIDFlagCommit = chamber.BlockIDFlagCommit
-	// BlockIDFlagNil - voted for nil.
-	BlockIDFlagNil = chamber.BlockIDFlagAbsent
-)
+// Canonical returns UTC time with no monotonic component.
+// Stripping the monotonic component is for time equality.
+// See https://github.com/tendermint/tendermint/pull/2203#discussion_r215064334
+func Canonical(t time.Time) time.Time {
+	return t.Round(0).UTC()
+}
