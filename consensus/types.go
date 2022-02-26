@@ -52,11 +52,6 @@ var (
 
 var MaxSignatureSize = 65
 
-type VerifiedBlock struct {
-	FullBlock
-	SeenCommit *Commit // not necessarily the LastCommit of next block, but enough to check the validity of the block
-}
-
 // Now returns the current time in UTC with no monotonic component.
 func CanonicalNow() time.Time {
 	return Canonical(time.Now())

@@ -136,7 +136,6 @@ func TestSignProposal(t *testing.T) {
 		Height:      20,
 		Round:       2,
 		POLRound:    -1,
-		BlockID:     common.Hash{},
 		TimestampMs: 352353,
 		Signature:   []byte{},
 	}

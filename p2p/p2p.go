@@ -53,13 +53,13 @@ var (
 )
 
 const (
-	MsgProposal        = 0x01
-	MsgVote            = 0x02
-	MsgVerifiedBlock   = 0x03
-	MsgHelloRequest    = 0x04
-	MsgHelloResponse   = 0x05
-	TopicHello         = "/mpbft/dev/hello/1.0.0"
-	TopicVerifiedBlock = "/mpbft/dev/verified_block/1.0.0"
+	MsgProposal      = 0x01
+	MsgVote          = 0x02
+	MsgVerifiedBlock = 0x03
+	MsgHelloRequest  = 0x04
+	MsgHelloResponse = 0x05
+	TopicHello       = "/mpbft/dev/hello/1.0.0"
+	TopicFullBlock   = "/mpbft/dev/fullblock/1.0.0"
 )
 
 func init() {
@@ -68,10 +68,10 @@ func init() {
 	prometheus.MustRegister(p2pMessagesReceived)
 	decoder[1] = decodeProposal
 	decoder[2] = decodeVote
-	decoder[3] = decodeVerifiedBlock
+	decoder[3] = decodeFullBlock
 	decoder[4] = decodeHelloRequest
 	decoder[5] = decodeHelloResponse
-	decoder[6] = decodeGetVerifiedBlockRequest
+	decoder[6] = decodeGetFullBlockRequest
 }
 
 type HelloRequest struct {
@@ -82,7 +82,7 @@ type HelloResponse struct {
 	LastHeight uint64
 }
 
-type GetVerifiedBlockRequest struct {
+type GetFullBlockRequest struct {
 	Height uint64
 }
 
@@ -106,8 +106,8 @@ func (req *HelloResponse) ValidateBasic() error {
 	return nil
 }
 
-func decodeGetVerifiedBlockRequest(data []byte) (interface{}, error) {
-	var req GetVerifiedBlockRequest
+func decodeGetFullBlockRequest(data []byte) (interface{}, error) {
+	var req GetFullBlockRequest
 	err := rlp.DecodeBytes(data, &req)
 	return req, err
 }
@@ -159,9 +159,9 @@ func encodeProposal(p *consensus.Proposal) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func decodeVerifiedBlock(data []byte) (interface{}, error) {
-	var b consensus.VerifiedBlock
-	err := rlp.DecodeBytes(data, &b)
+func decodeFullBlock(data []byte) (interface{}, error) {
+	var b consensus.FullBlock
+	err := b.DecodeFromRLPBytes(data)
 	return b, err
 }
 
@@ -185,7 +185,7 @@ func encodeRaw(msg interface{}) ([]byte, error) {
 		data, err = encodeProposal(m)
 	case *consensus.Vote:
 		data, err = encodeVote(m)
-	case *consensus.VerifiedBlock:
+	case *consensus.FullBlock:
 		data, err = rlp.EncodeToBytes(m)
 	case *HelloRequest:
 		data, err = rlp.EncodeToBytes(m)
@@ -204,13 +204,13 @@ func encode(msg interface{}) ([]byte, error) {
 		typeData = []byte{1}
 	case *consensus.Vote:
 		typeData = []byte{2}
-	case *consensus.VerifiedBlock:
+	case *consensus.FullBlock:
 		typeData = []byte{3}
 	case *HelloRequest:
 		typeData = []byte{4}
 	case *HelloResponse:
 		typeData = []byte{5}
-	case *GetVerifiedBlockRequest:
+	case *GetFullBlockRequest:
 		typeData = []byte{6}
 	}
 
@@ -429,7 +429,7 @@ func NewP2PServer(
 		}
 	})
 
-	h.SetStreamHandler(TopicVerifiedBlock, func(stream network.Stream) {
+	h.SetStreamHandler(TopicFullBlock, func(stream network.Stream) {
 		defer stream.Close()
 
 		data, err := ReadMsgWithPrependedSize(stream)
@@ -437,24 +437,23 @@ func NewP2PServer(
 			return
 		}
 
-		var msg GetVerifiedBlockRequest
+		var msg GetFullBlockRequest
 
 		err = rlp.DecodeBytes(data, &msg)
 		if err != nil {
 			return
 		}
 
-		log.Debug("received verified_block_req",
+		log.Debug("received fullblock_req",
 			"payload", data,
 			"raw", data)
 
 		// TODO: check height correctness
-		vb := &consensus.VerifiedBlock{
-			FullBlock:  *blockStore.LoadBlock(msg.Height),
-			SeenCommit: blockStore.LoadBlockCommit(msg.Height),
-		}
+		vb := blockStore.LoadBlock(msg.Height)
+		commit := blockStore.LoadBlockCommit(msg.Height)
+		vb = vb.WithCommit(commit)
 
-		resp, err := rlp.EncodeToBytes(vb)
+		resp, err := vb.EncodeToRLPBytes()
 		if err != nil {
 			return
 		}
@@ -607,7 +606,7 @@ func (server *Server) Run(ctx context.Context) error {
 			p2pMessagesReceived.WithLabelValues("observation").Inc()
 		case *HelloRequest:
 		case *HelloResponse:
-		case *GetVerifiedBlockRequest:
+		case *GetFullBlockRequest:
 		default:
 			p2pMessagesReceived.WithLabelValues("unknown").Inc()
 			log.Warn("received unknown message type (running outdated software?)",

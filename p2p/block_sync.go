@@ -66,27 +66,27 @@ func (bs *BlockSync) sync(ctx context.Context) error {
 	log.Info("Sycning block", "from", localLastHeight, "to", maxHeight)
 
 	for height := localLastHeight + 1; height <= maxHeight; height++ {
-		req := &GetVerifiedBlockRequest{Height: height}
-		var vb consensus.VerifiedBlock
-		if err := SendRPC(ctx, bs.h, maxPeer, TopicVerifiedBlock, req, &vb); err != nil {
+		req := &GetFullBlockRequest{Height: height}
+		var vb consensus.FullBlock
+		if err := SendRPC(ctx, bs.h, maxPeer, TopicFullBlock, req, &vb); err != nil {
 			return err
 		}
 
-		if err := bs.executor.ValidateBlock(bs.chainState, &vb.FullBlock); err != nil {
+		if err := bs.executor.ValidateBlock(bs.chainState, &vb); err != nil {
 			return err
 		}
 
 		if err := bs.chainState.Validators.VerifyCommit(
-			bs.chainState.ChainID, vb.Hash(), vb.NumberU64(), vb.SeenCommit); err != nil {
+			bs.chainState.ChainID, vb.Hash(), vb.NumberU64(), vb.Header().Commit); err != nil {
 			return err
 		}
 
-		newChainState, err := bs.executor.ApplyBlock(ctx, bs.chainState, &vb.FullBlock)
+		newChainState, err := bs.executor.ApplyBlock(ctx, bs.chainState, &vb)
 		if err != nil {
 			return err
 		}
 
-		bs.blockStore.SaveBlock(&vb.FullBlock, vb.SeenCommit)
+		bs.blockStore.SaveBlock(&vb, vb.Header().Commit)
 		bs.chainState = newChainState
 	}
 
