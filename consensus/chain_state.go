@@ -121,7 +121,7 @@ func (state ChainState) MakeBlock(
 
 	// Build base block with block data.
 	block := &FullBlock{
-		Block: *types.NewBlock(
+		Block: types.NewBlock(
 			&Header{
 				ParentHash:     state.LastBlockID,
 				Number:         big.NewInt(int64(height)),
