@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/go-minimal-pbft/consensus"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 )

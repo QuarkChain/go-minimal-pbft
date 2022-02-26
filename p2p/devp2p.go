@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/ethereum/go-ethereum/log"
 	ethp2p "github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/nat"
-	"github.com/go-minimal-pbft/consensus"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"go.uber.org/zap"
 )

@@ -7,10 +7,10 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/QuarkChain/go-minimal-pbft/consensus"
+	"github.com/QuarkChain/go-minimal-pbft/p2p"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/go-minimal-pbft/consensus"
-	"github.com/go-minimal-pbft/p2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"

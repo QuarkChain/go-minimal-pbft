@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/go-minimal-pbft/consensus"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 

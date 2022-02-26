@@ -8,9 +8,9 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/go-minimal-pbft/consensus"
 	"github.com/spf13/cobra"
 )
 

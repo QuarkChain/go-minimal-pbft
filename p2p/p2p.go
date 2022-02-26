@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-minimal-pbft/consensus"
+	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/libp2p/go-libp2p-core/network"

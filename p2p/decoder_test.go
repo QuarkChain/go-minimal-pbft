@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/go-minimal-pbft/consensus"
 	"github.com/stretchr/testify/assert"
 )
 
