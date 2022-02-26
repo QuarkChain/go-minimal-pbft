@@ -1,4 +1,4 @@
-module github.com/go-minimal-pbft
+module github.com/QuarkChain/go-minimal-pbft
 
 go 1.17
 
