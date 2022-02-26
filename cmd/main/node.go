@@ -161,7 +161,7 @@ func runNode(cmd *cobra.Command, args []string) {
 	if len(vals) == 1 && pubVal != nil && vals[0] == pubVal.Address() {
 		log.Info("Running in self validator mode, skipping block sync")
 	} else {
-		bs := p2p.NewBlockSync(p2pserver.Host, *gcs, bs, executor)
+		bs := p2p.NewBlockSync(p2pserver.Host, *gcs, bs, executor, obsvC)
 		bs.Start(rootCtx)
 		err := bs.WaitDone()
 		if err != nil {
@@ -185,6 +185,8 @@ func runNode(cmd *cobra.Command, args []string) {
 	)
 
 	consensusState.SetPrivValidator(privVal)
+
+	p2pserver.SetConsensusState(consensusState)
 
 	consensusState.Start(rootCtx)
 

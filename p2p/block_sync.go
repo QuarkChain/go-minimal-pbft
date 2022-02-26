@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
@@ -17,10 +18,11 @@ type BlockSync struct {
 	blockStore consensus.BlockStore
 	chainState consensus.ChainState
 	err        error
+	obsvC      chan consensus.MsgInfo
 }
 
-func NewBlockSync(h host.Host, chainState consensus.ChainState, blockStore consensus.BlockStore, executor consensus.BlockExecutor) *BlockSync {
-	return &BlockSync{h: h, executor: executor, blockStore: blockStore, chainState: chainState}
+func NewBlockSync(h host.Host, chainState consensus.ChainState, blockStore consensus.BlockStore, executor consensus.BlockExecutor, obsvC chan consensus.MsgInfo) *BlockSync {
+	return &BlockSync{h: h, executor: executor, blockStore: blockStore, chainState: chainState, obsvC: obsvC}
 }
 
 func (bs *BlockSync) Start(ctx context.Context) {
@@ -37,60 +39,87 @@ func (bs *BlockSync) runRoutine(ctx context.Context) {
 func (bs *BlockSync) sync(ctx context.Context) error {
 	ps := bs.h.Network().Peers()
 
-	req := &HelloRequest{}
-
 	var maxPeer peer.ID
 	var maxHeight uint64
 
-	for _, p := range ps {
-		resp := &HelloResponse{}
-		err := SendRPC(context.Background(), bs.h, p, TopicHello, req, resp)
+	for {
+		for _, p := range ps {
+			req := &HelloRequest{}
+			resp := &HelloResponse{}
+			err := SendRPC(context.Background(), bs.h, p, TopicHello, req, resp)
+			if err != nil {
+				continue
+			}
+
+			log.Info("Find peer", "peer", p, "last_height", resp.LastHeight)
+			if resp.LastHeight > maxHeight {
+				maxHeight = resp.LastHeight
+				maxPeer = p
+			}
+		}
+
+		localLastHeight := bs.blockStore.Height()
+
+		if maxHeight < localLastHeight {
+			// TODO: may return error
+			return nil
+		} else if maxHeight == localLastHeight {
+			break
+		}
+
+		log.Info("Sycning block", "from", localLastHeight, "to", maxHeight)
+
+		for height := localLastHeight + 1; height <= maxHeight; height++ {
+			req := &GetFullBlockRequest{Height: height}
+			var vb consensus.FullBlock
+			if err := SendRPC(ctx, bs.h, maxPeer, TopicFullBlock, req, &vb); err != nil {
+				return err
+			}
+
+			if err := bs.executor.ValidateBlock(bs.chainState, &vb); err != nil {
+				return err
+			}
+
+			if err := bs.chainState.Validators.VerifyCommit(
+				bs.chainState.ChainID, vb.Hash(), vb.NumberU64(), vb.Header().Commit); err != nil {
+				return err
+			}
+
+			newChainState, err := bs.executor.ApplyBlock(ctx, bs.chainState, &vb)
+			if err != nil {
+				return err
+			}
+
+			bs.blockStore.SaveBlock(&vb, vb.Header().Commit)
+			bs.chainState = newChainState
+		}
+		log.Info("Sycned block", "from", localLastHeight, "to", maxHeight)
+
+	}
+	log.Info("Finished syncing")
+
+	req := &GetLatestMessagesRequest{}
+	resp := &GetLatestMessagesResponse{}
+	if err := SendRPC(ctx, bs.h, maxPeer, TopicLatestMessages, req, resp); err != nil {
+		return err
+	}
+
+	for _, msgData := range resp.MessageData {
+		msg, err := decode(msgData)
 		if err != nil {
-			continue
+			return err
 		}
 
-		log.Info("Find peer", "peer", p, "last_height", resp.LastHeight)
-		if resp.LastHeight > maxHeight {
-			maxHeight = resp.LastHeight
-			maxPeer = p
+		switch m := msg.(type) {
+		case *consensus.Proposal:
+			bs.obsvC <- consensus.MsgInfo{Msg: &consensus.ProposalMessage{m}, PeerID: maxPeer.String()}
+		case *consensus.Vote:
+			bs.obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{m}, PeerID: maxPeer.String()}
+		default:
+			return fmt.Errorf("unknown type")
 		}
 	}
 
-	localLastHeight := bs.blockStore.Height()
-
-	if maxHeight < localLastHeight {
-		// TODO: may return error
-		return nil
-	}
-
-	log.Info("Sycning block", "from", localLastHeight, "to", maxHeight)
-
-	for height := localLastHeight + 1; height <= maxHeight; height++ {
-		req := &GetFullBlockRequest{Height: height}
-		var vb consensus.FullBlock
-		if err := SendRPC(ctx, bs.h, maxPeer, TopicFullBlock, req, &vb); err != nil {
-			return err
-		}
-
-		if err := bs.executor.ValidateBlock(bs.chainState, &vb); err != nil {
-			return err
-		}
-
-		if err := bs.chainState.Validators.VerifyCommit(
-			bs.chainState.ChainID, vb.Hash(), vb.NumberU64(), vb.Header().Commit); err != nil {
-			return err
-		}
-
-		newChainState, err := bs.executor.ApplyBlock(ctx, bs.chainState, &vb)
-		if err != nil {
-			return err
-		}
-
-		bs.blockStore.SaveBlock(&vb, vb.Header().Commit)
-		bs.chainState = newChainState
-	}
-
-	log.Info("Sycned block", "from", localLastHeight, "to", maxHeight)
 	return nil
 }
 

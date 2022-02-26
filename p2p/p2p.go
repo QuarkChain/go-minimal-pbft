@@ -17,7 +17,6 @@ import (
 	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 	"github.com/multiformats/go-multiaddr"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/libp2p/go-libp2p"
@@ -53,13 +52,14 @@ var (
 )
 
 const (
-	MsgProposal      = 0x01
-	MsgVote          = 0x02
-	MsgVerifiedBlock = 0x03
-	MsgHelloRequest  = 0x04
-	MsgHelloResponse = 0x05
-	TopicHello       = "/mpbft/dev/hello/1.0.0"
-	TopicFullBlock   = "/mpbft/dev/fullblock/1.0.0"
+	MsgProposal         = 0x01
+	MsgVote             = 0x02
+	MsgVerifiedBlock    = 0x03
+	MsgHelloRequest     = 0x04
+	MsgHelloResponse    = 0x05
+	TopicHello          = "/mpbft/dev/hello/1.0.0"
+	TopicFullBlock      = "/mpbft/dev/fullblock/1.0.0"
+	TopicLatestMessages = "/mpbft/dev/latest_messages/1.0.0"
 )
 
 func init() {
@@ -80,6 +80,13 @@ type HelloRequest struct {
 
 type HelloResponse struct {
 	LastHeight uint64
+}
+
+type GetLatestMessagesRequest struct {
+}
+
+type GetLatestMessagesResponse struct {
+	MessageData [][]byte
 }
 
 type GetFullBlockRequest struct {
@@ -110,19 +117,6 @@ func decodeGetFullBlockRequest(data []byte) (interface{}, error) {
 	var req GetFullBlockRequest
 	err := rlp.DecodeBytes(data, &req)
 	return req, err
-}
-
-// Vote represents a prevote, precommit, or commit vote from validators for
-// consensus.
-type VoteRaw struct {
-	Type             uint32
-	Height           uint64
-	Round            uint32
-	BlockID          common.Hash
-	Timestamp        uint64
-	ValidatorAddress common.Address
-	ValidatorIndex   uint32
-	Signature        []byte
 }
 
 func decodeVote(data []byte) (interface{}, error) {
@@ -615,4 +609,56 @@ func (server *Server) Run(ctx context.Context) error {
 				"from", envelope.GetFrom().String())
 		}
 	}
+}
+
+func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {
+	server.Host.SetStreamHandler(TopicLatestMessages, func(stream network.Stream) {
+		defer stream.Close()
+
+		data, err := ReadMsgWithPrependedSize(stream)
+		if err != nil {
+			return
+		}
+
+		var msg GetLatestMessagesRequest
+
+		err = rlp.DecodeBytes(data, &msg)
+		if err != nil {
+			return
+		}
+
+		log.Debug("received latest_message_req",
+			"payload", data,
+			"raw", data)
+
+		msgs := cs.GetLatestMessages()
+
+		var resp GetLatestMessagesResponse
+
+		for _, lmsg := range msgs {
+			var data []byte
+			var err error
+
+			switch m := (lmsg).(type) {
+			case *consensus.ProposalMessage:
+				data, err = encode(m.Proposal)
+			case *consensus.VoteMessage:
+				data, err = encode(m.Vote)
+			}
+			if err != nil {
+				return
+			}
+			resp.MessageData = append(resp.MessageData, data)
+		}
+
+		respData, err := rlp.EncodeToBytes(&resp)
+		if err != nil {
+			return
+		}
+
+		err = WriteMsgWithPrependedSize(stream, respData)
+		if err != nil {
+			return
+		}
+	})
 }

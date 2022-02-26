@@ -142,6 +142,9 @@ type ConsensusState struct {
 
 	// wait the channel event happening for shutting down the state gracefully
 	onStopCh chan *RoundState
+
+	latestProposalMessage *ProposalMessage
+	latestVoteMessageMap  map[common.Address]*VoteMessage
 }
 
 // NewState returns a new State.
@@ -189,6 +192,8 @@ func NewConsensusState(
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()
 
 	cs.BaseService = *NewBaseService("State", cs)
+
+	cs.latestVoteMessageMap = make(map[common.Address]*VoteMessage)
 
 	return cs
 }
@@ -750,6 +755,20 @@ func (cs *ConsensusState) receiveRoutine(ctx context.Context, maxSteps int) {
 	}
 }
 
+func (cs *ConsensusState) GetLatestMessages() []Message {
+	cs.mtx.Lock()
+	defer cs.mtx.Unlock()
+
+	var msgs []Message
+	if cs.latestProposalMessage != nil {
+		msgs = append(msgs, cs.latestProposalMessage)
+	}
+	for _, v := range cs.latestVoteMessageMap {
+		msgs = append(msgs, v)
+	}
+	return msgs
+}
+
 // state transitions on complete-proposal, 2/3-any, 2/3-one
 func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 	cs.mtx.Lock()
@@ -769,6 +788,7 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 		added, err = cs.setProposal(ctx, msg.Proposal)
 
 		if added {
+			cs.latestProposalMessage = msg
 			// broadcast the proposal to peer
 			cs.broadcastMessageToPeers(ctx, msg)
 		}
@@ -783,6 +803,8 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 			case <-ctx.Done():
 				return
 			}
+
+			cs.latestVoteMessageMap[msg.Vote.ValidatorAddress] = msg
 			// broadcast the vote to peer
 			cs.broadcastMessageToPeers(ctx, msg)
 		}
