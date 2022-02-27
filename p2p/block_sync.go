@@ -98,6 +98,10 @@ func (bs *BlockSync) sync(ctx context.Context) error {
 	}
 	log.Info("Finished syncing")
 
+	if maxPeer == "" {
+		return nil
+	}
+
 	req := &GetLatestMessagesRequest{}
 	resp := &GetLatestMessagesResponse{}
 	if err := SendRPC(ctx, bs.h, maxPeer, TopicLatestMessages, req, resp); err != nil {
@@ -110,6 +114,9 @@ func (bs *BlockSync) sync(ctx context.Context) error {
 			return err
 		}
 
+		log.Info("add latest message", "msg", msg)
+
+		// TODO: add in goroutine if full
 		switch m := msg.(type) {
 		case *consensus.Proposal:
 			bs.obsvC <- consensus.MsgInfo{Msg: &consensus.ProposalMessage{m}, PeerID: maxPeer.String()}
