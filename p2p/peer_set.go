@@ -34,13 +34,6 @@ var (
 	ErrPeerUnknown = errors.New("peer unknown")
 )
 
-type PeerData struct {
-	ConnState PeerConnectionState
-	Address   ma.Multiaddr
-	Direction network.Direction
-	Enr       *enr.Record
-}
-
 type PeerSet struct {
 	lock sync.RWMutex
 
@@ -111,6 +104,7 @@ func (p *PeerSet) Add(record *enr.Record, pid peer.ID, address ma.Multiaddr, dir
 		prevAddress := peerData.Address
 		peerData.Address = address
 		peerData.Direction = direction
+		peerData.peerId = pid
 		if record != nil {
 			peerData.Enr = record
 		}
@@ -124,6 +118,7 @@ func (p *PeerSet) Add(record *enr.Record, pid peer.ID, address ma.Multiaddr, dir
 		Direction: direction,
 		// Peers start disconnected; state will be updated when the handshake process begins.
 		ConnState: PeerDisconnected,
+		peerId:    pid,
 	}
 	if record != nil {
 		peerData.Enr = record

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
@@ -297,16 +298,19 @@ func SendRPC(ctx context.Context, h host.Host, peer peer.ID, topic string, req i
 }
 
 type Server struct {
-	Host          host.Host
-	blockStore    consensus.BlockStore
-	obsvC         chan consensus.MsgInfo
-	sendC         chan consensus.Message
-	priv          crypto.PrivKey
-	port          uint
-	networkID     string
-	nodeName      string
-	rootCtxCancel context.CancelFunc
-	peers         *PeerSet
+	Host           host.Host
+	blockStore     consensus.BlockStore
+	obsvC          chan consensus.MsgInfo
+	sendC          chan consensus.Message
+	priv           crypto.PrivKey
+	port           uint
+	networkID      string
+	nodeName       string
+	rootCtxCancel  context.CancelFunc
+	peers          *PeerSet
+	lock           sync.Mutex
+	IsRunning      bool
+	consensusState *consensus.ConsensusState
 }
 
 func NewP2PServer(
@@ -489,8 +493,11 @@ func NewP2PServer(
 	}, nil
 }
 
-func (server *Server) Run(ctx context.Context) error {
+func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {
+	server.consensusState = cs
+}
 
+func (server *Server) Run(ctx context.Context) error {
 	var err error
 
 	defer func() {
@@ -569,6 +576,9 @@ func (server *Server) Run(ctx context.Context) error {
 			}
 		}
 	}()
+
+	// TODO: lock
+	server.IsRunning = true
 
 	for {
 		envelope, err := sub.Next(ctx)
