@@ -1,14 +1,16 @@
 package p2p
 
 import (
+	"bytes"
 	"context"
 	"time"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-func (s *Server) processNewPeer(ctx context.Context, ps *PeerData) {
+func (s *Server) processNewPeer(ctx context.Context, peerId peer.ID) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -19,25 +21,30 @@ func (s *Server) processNewPeer(ctx context.Context, ps *PeerData) {
 		return
 	}
 
-	// if !ps.IsRunning() {
-	// // Set the peer state's closer to signal to all spawned goroutines to exit
-	// // when the peer is removed. We also set the running state to ensure we
-	// // do not spawn multiple instances of the same goroutines and finally we
-	// // set the waitgroup counter so we know when all goroutines have exited.
-	// ps.broadcastWG.Add(3)
-	// ps.SetRunning(true)
+	ps := s.peers.GetActive(peerId)
 
-	// start goroutines for this peer
-	// go s.gossipDataRoutine(ctx, ps)
-	go s.gossipVotesRoutine(ctx, ps)
-	// go s.queryMaj23Routine(ctx, ps)
+	if ps != nil {
 
-	// // Send our state to the peer. If we're block-syncing, broadcast a
-	// // RoundStepMessage later upon SwitchToConsensus().
-	// if !r.waitSync {
-	// 	go func() { _ = r.sendNewRoundStepMessage(ctx, ps.peerID) }()
-	// }
-	// }
+		// if !ps.IsRunning() {
+		// // Set the peer state's closer to signal to all spawned goroutines to exit
+		// // when the peer is removed. We also set the running state to ensure we
+		// // do not spawn multiple instances of the same goroutines and finally we
+		// // set the waitgroup counter so we know when all goroutines have exited.
+		// ps.broadcastWG.Add(3)
+		// ps.SetRunning(true)
+
+		// start goroutines for this peer
+		// go s.gossipDataRoutine(ctx, ps)
+		go s.gossipVotesRoutine(ctx, ps)
+		// go s.queryMaj23Routine(ctx, ps)
+
+		// // Send our state to the peer. If we're block-syncing, broadcast a
+		// // RoundStepMessage later upon SwitchToConsensus().
+		// if !r.waitSync {
+		// 	go func() { _ = r.sendNewRoundStepMessage(ctx, ps.peerID) }()
+		// }
+		// }
+	}
 }
 
 func (s *Server) gossipVotesRoutine(ctx context.Context, ps *PeerData) {
@@ -214,23 +221,21 @@ func (s *Server) gossipVotesForHeight(
 // pickSendVote picks a vote and sends it to the peer. It will return true if
 // there is a vote to send and false otherwise.
 func (s *Server) pickSendVote(ctx context.Context, ps *PeerData, votes VoteSetReader) (bool, error) {
-	_, ok := ps.PickVoteToSend(votes)
+	vote, ok := ps.PickVoteToSend(votes)
 	if !ok {
 		return false, nil
 	}
 
-	// return false, nil
+	log.Debug("sending vote message", "ps", ps, "vote", vote)
 
-	// log.Debug("sending vote message", "ps", ps, "vote", vote)
-	// if err := s.voteCh.Send(ctx, p2p.Envelope{
-	// 	To: ps.peerID,
-	// 	Message: &tmcons.Vote{
-	// 		Vote: vote.ToProto(),
-	// 	},
-	// }); err != nil {
-	// 	return false, err
-	// }
+	var buf bytes.Buffer
+	err := vote.EncodeRLP(&buf)
+	if err != nil {
+		return false, err
+	}
 
-	// ps.SetHasVote(vote)
+	Send(s.ctx, s.Host, ps.peerId, TopicVote, buf.Bytes())
+
+	ps.SetHasVote(vote)
 	return true, nil
 }

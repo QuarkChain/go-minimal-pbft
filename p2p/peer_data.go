@@ -1,11 +1,13 @@
 package p2p
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -236,4 +238,26 @@ func (ps *PeerData) getVoteBitArray(height uint64, round int32, votesType consen
 	}
 
 	return nil
+}
+
+// SetHasVote sets the given vote as known by the peer
+func (ps *PeerData) SetHasVote(vote *types.Vote) {
+	if vote == nil {
+		return
+	}
+	ps.lock.Lock()
+	defer ps.lock.Unlock()
+
+	ps.setHasVote(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex)
+}
+
+func (ps *PeerData) setHasVote(height uint64, round int32, voteType consensus.SignedMsgType, index int32) {
+	log.Debug("setHasVote", "type", voteType, "index", index, "peerH/R", fmt.Sprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
+		"H/R", fmt.Sprintf("%d/%d", height, round))
+
+	// NOTE: some may be nil BitArrays -> no side effects
+	psVotes := ps.getVoteBitArray(height, round, voteType)
+	if psVotes != nil {
+		psVotes.SetIndex(int(index), true)
+	}
 }

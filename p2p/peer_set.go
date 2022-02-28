@@ -127,6 +127,19 @@ func (p *PeerSet) Add(record *enr.Record, pid peer.ID, address ma.Multiaddr, dir
 	p.addIpToTracker(pid)
 }
 
+func (p *PeerSet) GetActive(peerId peer.ID) *PeerData {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	if peerData, ok := p.peerData(peerId); ok {
+		if peerData.ConnState == PeerConnected || peerData.ConnState == PeerConnecting {
+			return peerData
+		}
+		return nil
+	}
+	return nil
+}
+
 // Active returns the peers that are connecting or connected.
 func (p *PeerSet) Active() []peer.ID {
 	p.lock.RLock()

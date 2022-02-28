@@ -61,6 +61,7 @@ const (
 	MsgHelloResponse = 0x05
 	TopicHello       = "/mpbft/dev/hello/1.0.0"
 	TopicFullBlock   = "/mpbft/dev/fullblock/1.0.0"
+	TopicVote        = "/mpbft/dev/vote/1.0.0"
 )
 
 func init() {
@@ -306,6 +307,7 @@ type Server struct {
 	port           uint
 	networkID      string
 	nodeName       string
+	ctx            context.Context
 	rootCtxCancel  context.CancelFunc
 	peers          *PeerSet
 	lock           sync.Mutex
@@ -469,6 +471,28 @@ func NewP2PServer(
 		}
 	})
 
+	h.SetStreamHandler(TopicVote, func(stream network.Stream) {
+		defer stream.Close()
+
+		data, err := ReadMsgWithPrependedSize(stream)
+		if err != nil {
+			return
+		}
+
+		var vote consensus.Vote
+
+		err = vote.DecodeRLP(rlp.NewStream(stream, 0))
+		if err != nil {
+			return
+		}
+
+		log.Debug("received vote",
+			"payload", data,
+			"raw", data)
+
+		obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{Vote: &vote}, PeerID: string(stream.Conn().RemotePeer())}
+	})
+
 	// TODO: continually reconnect to bootstrap nodes?
 	if successes == 0 && !bootstrapNode {
 		return nil, fmt.Errorf("failed to connect to any bootstrap peer")
@@ -479,7 +503,7 @@ func NewP2PServer(
 	log.Info("Node has been started", "peer_id", h.ID().String(),
 		"addrs", fmt.Sprintf("%v", h.Addrs()))
 
-	return &Server{
+	s := &Server{
 		Host:          h,
 		blockStore:    blockStore,
 		obsvC:         obsvC,
@@ -488,9 +512,17 @@ func NewP2PServer(
 		port:          port,
 		networkID:     networkID,
 		nodeName:      nodeName,
+		ctx:           ctx,
 		rootCtxCancel: rootCtxCancel,
 		peers:         &PeerSet{},
-	}, nil
+	}
+
+	s.AddConnectionHandler(func(ctx context.Context, id peer.ID) error {
+		s.processNewPeer(ctx, id)
+		return nil
+	}, func(ctx context.Context, id peer.ID) error { return nil })
+
+	return s, nil
 }
 
 func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {

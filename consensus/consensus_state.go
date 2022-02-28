@@ -1020,7 +1020,7 @@ func (cs *ConsensusState) defaultDecideProposal(height uint64, round int32) {
 	defer cancel()
 	if err := cs.privValidator.SignProposal(ctx, cs.chainState.ChainID, proposal); err == nil {
 		// send proposal and block parts on internal msg queue
-		cs.sendInternalMessage(ctx, MsgInfo{&ProposalMessage{proposal}, ""})
+		cs.sendInternalMessage(ctx, MsgInfo{&ProposalMessage{Proposal: proposal}, ""})
 
 		log.Debug("signed proposal", "height", height, "round", round, "proposal", proposal)
 	} else if !cs.replayMode {
