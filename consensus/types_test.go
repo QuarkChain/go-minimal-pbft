@@ -55,7 +55,7 @@ func TestSerdeBlock(t *testing.T) {
 	}
 	cm := NewCommit(5, 6, common.Hash{}, []CommitSig{c})
 
-	b := &FullBlock{Block: *types.NewBlock(
+	b := &FullBlock{Block: types.NewBlock(
 		&Header{
 			ParentHash:     common.Hash{},
 			Number:         big.NewInt(6),

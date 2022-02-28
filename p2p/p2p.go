@@ -306,6 +306,7 @@ type Server struct {
 	networkID     string
 	nodeName      string
 	rootCtxCancel context.CancelFunc
+	peers         *PeerSet
 }
 
 func NewP2PServer(
@@ -484,6 +485,7 @@ func NewP2PServer(
 		networkID:     networkID,
 		nodeName:      nodeName,
 		rootCtxCancel: rootCtxCancel,
+		peers:         &PeerSet{},
 	}, nil
 }
 
