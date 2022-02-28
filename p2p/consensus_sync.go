@@ -214,10 +214,12 @@ func (s *Server) gossipVotesForHeight(
 // pickSendVote picks a vote and sends it to the peer. It will return true if
 // there is a vote to send and false otherwise.
 func (s *Server) pickSendVote(ctx context.Context, ps *PeerData, votes VoteSetReader) (bool, error) {
-	// vote, ok := ps.PickVoteToSend(votes)
-	// if !ok {
-	// 	return false, nil
-	// }
+	_, ok := ps.PickVoteToSend(votes)
+	if !ok {
+		return false, nil
+	}
+
+	// return false, nil
 
 	// log.Debug("sending vote message", "ps", ps, "vote", vote)
 	// if err := s.voteCh.Send(ctx, p2p.Envelope{

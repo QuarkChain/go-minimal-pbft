@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -17,7 +18,7 @@ type VoteSetReader interface {
 	GetRound() int32
 	Type() byte
 	Size() int
-	// BitArray() *BitArray
+	BitArray() *consensus.BitArray
 	GetByIndex(int32) *consensus.Vote
 	IsCommit() bool
 }
@@ -38,17 +39,17 @@ type PeerRoundState struct {
 	ProposalPOLRound int32 `json:"proposal_pol_round"`
 
 	// nil until ProposalPOLMessage received.
-	ProposalPOL     *BitArray `json:"proposal_pol"`
-	Prevotes        *BitArray `json:"prevotes"`          // All votes peer has for this round
-	Precommits      *BitArray `json:"precommits"`        // All precommits peer has for this round
-	LastCommitRound int32     `json:"last_commit_round"` // Round of commit for last height. -1 if none.
-	LastCommit      *BitArray `json:"last_commit"`       // All commit precommits of commit for last height.
+	ProposalPOL     *consensus.BitArray `json:"proposal_pol"`
+	Prevotes        *consensus.BitArray `json:"prevotes"`          // All votes peer has for this round
+	Precommits      *consensus.BitArray `json:"precommits"`        // All precommits peer has for this round
+	LastCommitRound int32               `json:"last_commit_round"` // Round of commit for last height. -1 if none.
+	LastCommit      *consensus.BitArray `json:"last_commit"`       // All commit precommits of commit for last height.
 
 	// Round that we have commit for. Not necessarily unique. -1 if none.
 	CatchupCommitRound int32 `json:"catchup_commit_round"`
 
 	// All commit precommits peer has for this height & CatchupCommitRound
-	CatchupCommit *BitArray `json:"catchup_commit"`
+	CatchupCommit *consensus.BitArray `json:"catchup_commit"`
 }
 
 type PeerData struct {
@@ -88,43 +89,151 @@ func (prs PeerRoundState) Copy() PeerRoundState {
 	return prs
 }
 
-// // PickVoteToSend picks a vote to send to the peer. It will return true if a
-// // vote was picked.
-// //
-// // NOTE: `votes` must be the correct Size() for the Height().
-// func (ps *PeerData) PickVoteToSend(votes types.VoteSetReader) (*consensus.Vote, bool) {
-// 	ps.mtx.Lock()
-// 	defer ps.mtx.Unlock()
+// PickVoteToSend picks a vote to send to the peer. It will return true if a
+// vote was picked.
+//
+// NOTE: `votes` must be the correct Size() for the Height().
+func (ps *PeerData) PickVoteToSend(votes VoteSetReader) (*consensus.Vote, bool) {
+	ps.lock.Lock()
+	defer ps.lock.Unlock()
 
-// 	if votes.Size() == 0 {
-// 		return nil, false
-// 	}
+	if votes.Size() == 0 {
+		return nil, false
+	}
 
-// 	var (
-// 		height    = votes.GetHeight()
-// 		round     = votes.GetRound()
-// 		votesType = tmproto.SignedMsgType(votes.Type())
-// 		size      = votes.Size()
-// 	)
+	var (
+		height    = votes.GetHeight()
+		round     = votes.GetRound()
+		votesType = consensus.SignedMsgType(votes.Type())
+		size      = votes.Size()
+	)
 
-// 	// lazily set data using 'votes'
-// 	if votes.IsCommit() {
-// 		ps.ensureCatchupCommitRound(height, round, size)
-// 	}
+	// lazily set data using 'votes'
+	if votes.IsCommit() {
+		ps.ensureCatchupCommitRound(height, round, size)
+	}
 
-// 	ps.ensureVoteBitArrays(height, size)
+	ps.ensureVoteBitArrays(height, size)
 
-// 	psVotes := ps.getVoteBitArray(height, round, votesType)
-// 	if psVotes == nil {
-// 		return nil, false // not something worth sending
-// 	}
+	psVotes := ps.getVoteBitArray(height, round, votesType)
+	if psVotes == nil {
+		return nil, false // not something worth sending
+	}
 
-// 	if index, ok := votes.BitArray().Sub(psVotes).PickRandom(); ok {
-// 		vote := votes.GetByIndex(int32(index))
-// 		if vote != nil {
-// 			return vote, true
-// 		}
-// 	}
+	if index, ok := votes.BitArray().Sub(psVotes).PickRandom(); ok {
+		vote := votes.GetByIndex(int32(index))
+		if vote != nil {
+			return vote, true
+		}
+	}
 
-// 	return nil, false
-// }
+	return nil, false
+}
+
+// 'round': A round for which we have a +2/3 commit.
+func (ps *PeerData) ensureCatchupCommitRound(height uint64, round int32, numValidators int) {
+	if ps.PRS.Height != height {
+		return
+	}
+
+	/*
+		NOTE: This is wrong, 'round' could change.
+		e.g. if orig round is not the same as block LastCommit round.
+		if ps.CatchupCommitRound != -1 && ps.CatchupCommitRound != round {
+			panic(fmt.Sprintf(
+				"Conflicting CatchupCommitRound. Height: %v,
+				Orig: %v,
+				New: %v",
+				height,
+				ps.CatchupCommitRound,
+				round))
+		}
+	*/
+
+	if ps.PRS.CatchupCommitRound == round {
+		return // Nothing to do!
+	}
+
+	ps.PRS.CatchupCommitRound = round
+	if round == ps.PRS.Round {
+		ps.PRS.CatchupCommit = ps.PRS.Precommits
+	} else {
+		ps.PRS.CatchupCommit = consensus.NewBitArray(numValidators)
+	}
+}
+
+func (ps *PeerData) ensureVoteBitArrays(height uint64, numValidators int) {
+	if ps.PRS.Height == height {
+		if ps.PRS.Prevotes == nil {
+			ps.PRS.Prevotes = consensus.NewBitArray(numValidators)
+		}
+		if ps.PRS.Precommits == nil {
+			ps.PRS.Precommits = consensus.NewBitArray(numValidators)
+		}
+		if ps.PRS.CatchupCommit == nil {
+			ps.PRS.CatchupCommit = consensus.NewBitArray(numValidators)
+		}
+		if ps.PRS.ProposalPOL == nil {
+			ps.PRS.ProposalPOL = consensus.NewBitArray(numValidators)
+		}
+	} else if ps.PRS.Height == height+1 {
+		if ps.PRS.LastCommit == nil {
+			ps.PRS.LastCommit = consensus.NewBitArray(numValidators)
+		}
+	}
+}
+
+func (ps *PeerData) getVoteBitArray(height uint64, round int32, votesType consensus.SignedMsgType) *consensus.BitArray {
+	if !types.IsVoteTypeValid(votesType) {
+		return nil
+	}
+
+	if ps.PRS.Height == height {
+		if ps.PRS.Round == round {
+			switch votesType {
+			case consensus.PrevoteType:
+				return ps.PRS.Prevotes
+
+			case consensus.PrecommitType:
+				return ps.PRS.Precommits
+			}
+		}
+
+		if ps.PRS.CatchupCommitRound == round {
+			switch votesType {
+			case consensus.PrevoteType:
+				return nil
+
+			case consensus.PrecommitType:
+				return ps.PRS.CatchupCommit
+			}
+		}
+
+		if ps.PRS.ProposalPOLRound == round {
+			switch votesType {
+			case consensus.PrevoteType:
+				return ps.PRS.ProposalPOL
+
+			case consensus.PrecommitType:
+				return nil
+			}
+		}
+
+		return nil
+	}
+	if ps.PRS.Height == height+1 {
+		if ps.PRS.LastCommitRound == round {
+			switch votesType {
+			case consensus.PrevoteType:
+				return nil
+
+			case consensus.PrecommitType:
+				return ps.PRS.LastCommit
+			}
+		}
+
+		return nil
+	}
+
+	return nil
+}

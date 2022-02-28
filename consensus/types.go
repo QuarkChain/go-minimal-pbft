@@ -20,6 +20,7 @@ type (
 	CommitSig       = types.CommitSig
 	Proposal        = types.Proposal
 	ProposalMessage = types.ProposalMessage
+	BitArray        = types.BitArray
 
 	Header = types.Header
 
@@ -43,6 +44,7 @@ var (
 	CommitToVoteSet    = types.CommitToVoteSet
 	NewProposal        = types.NewProposal
 	NewCommitSigAbsent = types.NewCommitSigAbsent
+	NewBitArray        = types.NewBitArray
 )
 
 // func NewBlock(header *types.Header, body *types.Body, lastCommit *Commit) *Block {
