@@ -62,10 +62,13 @@ type PeerData struct {
 }
 
 type PeerState struct {
-	lock   sync.Mutex
-	DoneCh chan struct{}
-	PRS    PeerRoundState
-	peerID peer.ID
+	lock    sync.Mutex
+	DoneCh  chan struct{}
+	PRS     PeerRoundState
+	peerID  peer.ID
+	running bool
+
+	broadcastWG sync.WaitGroup
 }
 
 // NewPeerState returns a new PeerState for the given node ID.
@@ -277,4 +280,21 @@ func (ps *PeerState) setHasVote(height uint64, round int32, voteType consensus.S
 	if psVotes != nil {
 		psVotes.SetIndex(int(index), true)
 	}
+}
+
+// SetRunning sets the running state of the peer.
+func (ps *PeerState) SetRunning(v bool) {
+	ps.lock.Lock()
+	defer ps.lock.Unlock()
+
+	ps.running = v
+}
+
+// IsRunning returns true if a PeerState is considered running where multiple
+// broadcasting goroutines exist for the peer.
+func (ps *PeerState) IsRunning() bool {
+	ps.lock.Lock()
+	defer ps.lock.Unlock()
+
+	return ps.running
 }

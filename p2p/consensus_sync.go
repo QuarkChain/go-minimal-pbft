@@ -27,26 +27,24 @@ func (s *Server) processNewPeer(ctx context.Context, peerID peer.ID) {
 		s.peerStateMap[peerID] = ps
 	}
 
-	if ps != nil {
-
-		// if !ps.IsRunning() {
-		// // Set the peer state's closer to signal to all spawned goroutines to exit
-		// // when the peer is removed. We also set the running state to ensure we
-		// // do not spawn multiple instances of the same goroutines and finally we
-		// // set the waitgroup counter so we know when all goroutines have exited.
-		// ps.broadcastWG.Add(3)
-		// ps.SetRunning(true)
+	if !ps.IsRunning() {
+		// TODO: if process new peer is called twice with the same peer, may have double claim issue?
+		// Set the peer state's closer to signal to all spawned goroutines to exit
+		// when the peer is removed. We also set the running state to ensure we
+		// do not spawn multiple instances of the same goroutines and finally we
+		// set the waitgroup counter so we know when all goroutines have exited.
+		ps.broadcastWG.Add(1)
+		ps.SetRunning(true)
 
 		// start goroutines for this peer
 		// go s.gossipDataRoutine(ctx, ps)
 		go s.gossipVotesRoutine(ctx, ps)
 		// go s.queryMaj23Routine(ctx, ps)
 
-		// // Send our state to the peer. If we're block-syncing, broadcast a
-		// // RoundStepMessage later upon SwitchToConsensus().
+		// Send our state to the peer. If we're block-syncing, broadcast a
+		// RoundStepMessage later upon SwitchToConsensus().
 		// if !r.waitSync {
 		// 	go func() { _ = r.sendNewRoundStepMessage(ctx, ps.peerID) }()
-		// }
 		// }
 	}
 }
@@ -70,19 +68,19 @@ func (s *Server) processRemovePeer(ctx context.Context, peerID peer.ID) {
 		go func() {
 			// Wait for all spawned broadcast goroutines to exit before marking the
 			// peer state as no longer running and removal from the peers map.
-			// ps.broadcastWG.Wait()
+			ps.broadcastWG.Wait()
 
 			s.lock.Lock()
 			delete(s.peerStateMap, peerID)
 			s.lock.Unlock()
 
-			// ps.SetRunning(false)
+			ps.SetRunning(false)
 		}()
 	}
 }
 
 func (s *Server) gossipVotesRoutine(ctx context.Context, ps *PeerState) {
-	// defer ps.broadcastWG.Done()
+	defer ps.broadcastWG.Done()
 
 	// XXX: simple hack to throttle logs upon sleep
 	logThrottle := 0
