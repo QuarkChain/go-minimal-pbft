@@ -10,7 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-func (s *Server) processNewPeer(ctx context.Context, peerId peer.ID) {
+func (s *Server) processNewPeer(ctx context.Context, peerID peer.ID) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -21,7 +21,11 @@ func (s *Server) processNewPeer(ctx context.Context, peerId peer.ID) {
 		return
 	}
 
-	ps := s.peers.GetActive(peerId)
+	ps, ok := s.peerStateMap[peerID]
+	if !ok {
+		ps = NewPeerState(peerID)
+		s.peerStateMap[peerID] = ps
+	}
 
 	if ps != nil {
 
@@ -47,7 +51,37 @@ func (s *Server) processNewPeer(ctx context.Context, peerId peer.ID) {
 	}
 }
 
-func (s *Server) gossipVotesRoutine(ctx context.Context, ps *PeerData) {
+func (s *Server) processRemovePeer(ctx context.Context, peerID peer.ID) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// Do not allow starting new broadcasting goroutines after reactor shutdown
+	// has been initiated. This can happen after we've manually closed all
+	// peer goroutines, but the router still sends in-flight peer updates.
+	if !s.IsRunning {
+		return
+	}
+
+	ps, ok := s.peerStateMap[peerID]
+	if ok {
+		// signal to all spawned goroutines for the peer to gracefully exit
+		close(ps.DoneCh)
+
+		go func() {
+			// Wait for all spawned broadcast goroutines to exit before marking the
+			// peer state as no longer running and removal from the peers map.
+			// ps.broadcastWG.Wait()
+
+			s.lock.Lock()
+			delete(s.peerStateMap, peerID)
+			s.lock.Unlock()
+
+			// ps.SetRunning(false)
+		}()
+	}
+}
+
+func (s *Server) gossipVotesRoutine(ctx context.Context, ps *PeerState) {
 	// defer ps.broadcastWG.Done()
 
 	// XXX: simple hack to throttle logs upon sleep
@@ -97,7 +131,7 @@ OUTER_LOOP:
 			if ok, err := s.pickSendVote(ctx, ps, rs.LastCommit); err != nil {
 				return
 			} else if ok {
-				log.Debug("picked rs.LastCommit to send", "peer", ps.peerId, "height", prs.Height)
+				log.Debug("picked rs.LastCommit to send", "peer", ps.peerID, "height", prs.Height)
 				continue OUTER_LOOP
 			}
 		}
@@ -111,7 +145,7 @@ OUTER_LOOP:
 				if ok, err := s.pickSendVote(ctx, ps, commit); err != nil {
 					return
 				} else if ok {
-					log.Debug("picked Catchup commit to send", "peer", ps.peerId, "height", prs.Height)
+					log.Debug("picked Catchup commit to send", "peer", ps.peerID, "height", prs.Height)
 					continue OUTER_LOOP
 				}
 			}
@@ -122,7 +156,7 @@ OUTER_LOOP:
 			logThrottle = 1
 			log.Debug(
 				"no votes to send; sleeping",
-				"peer", ps.peerId,
+				"peer", ps.peerID,
 				"rs.Height", rs.Height,
 				"prs.Height", prs.Height,
 				// "localPV", rs.Votes.Prevotes(rs.Round).BitArray(), "peerPV", prs.Prevotes,
@@ -146,7 +180,7 @@ func (s *Server) gossipVotesForHeight(
 	ctx context.Context,
 	rs *consensus.RoundState,
 	prs *PeerRoundState,
-	ps *PeerData,
+	ps *PeerState,
 ) (bool, error) {
 	// logger := r.logger.With("height", prs.Height).With("peer", ps.peerID)
 
@@ -155,7 +189,7 @@ func (s *Server) gossipVotesForHeight(
 		if ok, err := s.pickSendVote(ctx, ps, rs.LastCommit); err != nil {
 			return false, err
 		} else if ok {
-			log.Debug("picked rs.LastCommit to send", "peer", ps.peerId, "height", prs.Height)
+			log.Debug("picked rs.LastCommit to send", "peer", ps.peerID, "height", prs.Height)
 			return true, nil
 
 		}
@@ -167,7 +201,7 @@ func (s *Server) gossipVotesForHeight(
 			if ok, err := s.pickSendVote(ctx, ps, polPrevotes); err != nil {
 				return false, err
 			} else if ok {
-				log.Debug("picked rs.Prevotes(prs.ProposalPOLRound) to send", "peer", ps.peerId, "height", prs.Height, "round", prs.ProposalPOLRound)
+				log.Debug("picked rs.Prevotes(prs.ProposalPOLRound) to send", "peer", ps.peerID, "height", prs.Height, "round", prs.ProposalPOLRound)
 				return true, nil
 			}
 		}
@@ -178,7 +212,7 @@ func (s *Server) gossipVotesForHeight(
 		if ok, err := s.pickSendVote(ctx, ps, rs.Votes.Prevotes(prs.Round)); err != nil {
 			return false, err
 		} else if ok {
-			log.Debug("picked rs.Prevotes(prs.Round) to send", "peer", ps.peerId, "height", prs.Height, "round", prs.Round)
+			log.Debug("picked rs.Prevotes(prs.Round) to send", "peer", ps.peerID, "height", prs.Height, "round", prs.Round)
 			return true, nil
 		}
 	}
@@ -188,7 +222,7 @@ func (s *Server) gossipVotesForHeight(
 		if ok, err := s.pickSendVote(ctx, ps, rs.Votes.Precommits(prs.Round)); err != nil {
 			return false, err
 		} else if ok {
-			log.Debug("picked rs.Precommits(prs.Round) to send", "peer", ps.peerId, "height", prs.Height, "round", prs.Round)
+			log.Debug("picked rs.Precommits(prs.Round) to send", "peer", ps.peerID, "height", prs.Height, "round", prs.Round)
 			return true, nil
 		}
 	}
@@ -198,7 +232,7 @@ func (s *Server) gossipVotesForHeight(
 		if ok, err := s.pickSendVote(ctx, ps, rs.Votes.Prevotes(prs.Round)); err != nil {
 			return false, err
 		} else if ok {
-			log.Debug("picked rs.Prevotes(prs.Round) to send", "peer", ps.peerId, "height", prs.Height, "round", prs.Round)
+			log.Debug("picked rs.Prevotes(prs.Round) to send", "peer", ps.peerID, "height", prs.Height, "round", prs.Round)
 			return true, nil
 		}
 	}
@@ -209,7 +243,7 @@ func (s *Server) gossipVotesForHeight(
 			if ok, err := s.pickSendVote(ctx, ps, polPrevotes); err != nil {
 				return false, err
 			} else if ok {
-				log.Debug("picked rs.Prevotes(prs.ProposalPOLRound) to send", "peer", ps.peerId, "height", prs.Height, "round", prs.ProposalPOLRound)
+				log.Debug("picked rs.Prevotes(prs.ProposalPOLRound) to send", "peer", ps.peerID, "height", prs.Height, "round", prs.ProposalPOLRound)
 				return true, nil
 			}
 		}
@@ -220,7 +254,7 @@ func (s *Server) gossipVotesForHeight(
 
 // pickSendVote picks a vote and sends it to the peer. It will return true if
 // there is a vote to send and false otherwise.
-func (s *Server) pickSendVote(ctx context.Context, ps *PeerData, votes VoteSetReader) (bool, error) {
+func (s *Server) pickSendVote(ctx context.Context, ps *PeerState, votes VoteSetReader) (bool, error) {
 	vote, ok := ps.PickVoteToSend(votes)
 	if !ok {
 		return false, nil
@@ -234,7 +268,7 @@ func (s *Server) pickSendVote(ctx context.Context, ps *PeerData, votes VoteSetRe
 		return false, err
 	}
 
-	Send(s.ctx, s.Host, ps.peerId, TopicVote, buf.Bytes())
+	Send(s.ctx, s.Host, ps.peerID, TopicVote, buf.Bytes())
 
 	ps.SetHasVote(vote)
 	return true, nil

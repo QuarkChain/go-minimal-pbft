@@ -310,6 +310,7 @@ type Server struct {
 	ctx            context.Context
 	rootCtxCancel  context.CancelFunc
 	peers          *PeerSet
+	peerStateMap   map[peer.ID]*PeerState
 	lock           sync.Mutex
 	IsRunning      bool
 	consensusState *consensus.ConsensusState
@@ -515,13 +516,17 @@ func NewP2PServer(
 		ctx:           ctx,
 		rootCtxCancel: rootCtxCancel,
 		peers:         &PeerSet{},
+		peerStateMap:  make(map[peer.ID]*PeerState),
 	}
 
 	s.AddConnectionHandler(func(ctx context.Context, id peer.ID) error {
 		s.processNewPeer(ctx, id)
 		return nil
 	}, func(ctx context.Context, id peer.ID) error { return nil })
-
+	s.AddDisconnectionHandler(func(ctx context.Context, id peer.ID) error {
+		s.processRemovePeer(ctx, id)
+		return nil
+	})
 	return s, nil
 }
 

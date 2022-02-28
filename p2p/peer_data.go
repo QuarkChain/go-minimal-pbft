@@ -59,15 +59,32 @@ type PeerData struct {
 	Address   ma.Multiaddr
 	Direction network.Direction
 	Enr       *enr.Record
-	DoneCh    chan struct{}
-	lock      sync.Mutex
-	PRS       PeerRoundState
-	peerId    peer.ID
+}
+
+type PeerState struct {
+	lock   sync.Mutex
+	DoneCh chan struct{}
+	PRS    PeerRoundState
+	peerID peer.ID
+}
+
+// NewPeerState returns a new PeerState for the given node ID.
+func NewPeerState(peerID peer.ID) *PeerState {
+	return &PeerState{
+		peerID: peerID,
+		DoneCh: make(chan struct{}),
+		PRS: PeerRoundState{
+			Round:              -1,
+			ProposalPOLRound:   -1,
+			LastCommitRound:    -1,
+			CatchupCommitRound: -1,
+		},
+	}
 }
 
 // GetRoundState returns a shallow copy of the PeerRoundState. There's no point
 // in mutating it since it won't change PeerState.
-func (ps *PeerData) GetRoundState() *PeerRoundState {
+func (ps *PeerState) GetRoundState() *PeerRoundState {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
 
@@ -95,7 +112,7 @@ func (prs PeerRoundState) Copy() PeerRoundState {
 // vote was picked.
 //
 // NOTE: `votes` must be the correct Size() for the Height().
-func (ps *PeerData) PickVoteToSend(votes VoteSetReader) (*consensus.Vote, bool) {
+func (ps *PeerState) PickVoteToSend(votes VoteSetReader) (*consensus.Vote, bool) {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
 
@@ -133,7 +150,7 @@ func (ps *PeerData) PickVoteToSend(votes VoteSetReader) (*consensus.Vote, bool) 
 }
 
 // 'round': A round for which we have a +2/3 commit.
-func (ps *PeerData) ensureCatchupCommitRound(height uint64, round int32, numValidators int) {
+func (ps *PeerState) ensureCatchupCommitRound(height uint64, round int32, numValidators int) {
 	if ps.PRS.Height != height {
 		return
 	}
@@ -164,7 +181,7 @@ func (ps *PeerData) ensureCatchupCommitRound(height uint64, round int32, numVali
 	}
 }
 
-func (ps *PeerData) ensureVoteBitArrays(height uint64, numValidators int) {
+func (ps *PeerState) ensureVoteBitArrays(height uint64, numValidators int) {
 	if ps.PRS.Height == height {
 		if ps.PRS.Prevotes == nil {
 			ps.PRS.Prevotes = consensus.NewBitArray(numValidators)
@@ -185,7 +202,7 @@ func (ps *PeerData) ensureVoteBitArrays(height uint64, numValidators int) {
 	}
 }
 
-func (ps *PeerData) getVoteBitArray(height uint64, round int32, votesType consensus.SignedMsgType) *consensus.BitArray {
+func (ps *PeerState) getVoteBitArray(height uint64, round int32, votesType consensus.SignedMsgType) *consensus.BitArray {
 	if !types.IsVoteTypeValid(votesType) {
 		return nil
 	}
@@ -241,7 +258,7 @@ func (ps *PeerData) getVoteBitArray(height uint64, round int32, votesType consen
 }
 
 // SetHasVote sets the given vote as known by the peer
-func (ps *PeerData) SetHasVote(vote *types.Vote) {
+func (ps *PeerState) SetHasVote(vote *types.Vote) {
 	if vote == nil {
 		return
 	}
@@ -251,7 +268,7 @@ func (ps *PeerData) SetHasVote(vote *types.Vote) {
 	ps.setHasVote(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex)
 }
 
-func (ps *PeerData) setHasVote(height uint64, round int32, voteType consensus.SignedMsgType, index int32) {
+func (ps *PeerState) setHasVote(height uint64, round int32, voteType consensus.SignedMsgType, index int32) {
 	log.Debug("setHasVote", "type", voteType, "index", index, "peerH/R", fmt.Sprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
 		"H/R", fmt.Sprintf("%d/%d", height, round))
 
