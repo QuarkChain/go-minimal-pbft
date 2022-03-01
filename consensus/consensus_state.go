@@ -140,6 +140,10 @@ type ConsensusState struct {
 	// closed when we finish shutting down
 	done chan struct{}
 
+	// synchronous pubsub between consensus state and reactor.
+	// state only emits EventNewRoundStep, EventValidBlock, and EventVote
+	evsw EventSwitch
+
 	// wait the channel event happening for shutting down the state gracefully
 	onStopCh chan *RoundState
 }
@@ -170,6 +174,7 @@ func NewConsensusState(
 		doWALCatchup:     true,
 		// wal:              nilWAL{},
 		// evpool:   evpool,
+		evsw:     NewEventSwitch(),
 		onStopCh: make(chan *RoundState),
 	}
 
@@ -647,6 +652,8 @@ func (cs *ConsensusState) newStep(ctx context.Context) {
 	// }
 
 	cs.nSteps++
+
+	cs.evsw.FireEvent(ctx, EventNewRoundStepValue, &cs.RoundState)
 }
 
 //-----------------------------------------
@@ -1352,6 +1359,8 @@ func (cs *ConsensusState) enterCommit(ctx context.Context, height uint64, commit
 		// We're getting the wrong block.
 		// Set up ProposalBlockParts and keep waiting.
 		cs.ProposalBlock = nil
+
+		cs.evsw.FireEvent(ctx, EventValidBlockValue, &cs.RoundState)
 	}
 }
 
@@ -1634,6 +1643,8 @@ func (cs *ConsensusState) addVote(
 			return
 		}
 
+		cs.evsw.FireEvent(ctx, EventVoteValue, vote)
+
 		// if we can skip timeoutCommit and have all the votes now,
 		if cs.Config.SkipTimeoutCommit && cs.LastCommit.HasAll() {
 			// go straight to new round (skip timeout commit)
@@ -1657,6 +1668,8 @@ func (cs *ConsensusState) addVote(
 		// Either duplicate, or error upon cs.Votes.AddByIndex()
 		return
 	}
+
+	cs.evsw.FireEvent(ctx, EventVoteValue, vote)
 
 	switch vote.Type {
 	case PrevoteType:
@@ -1698,6 +1711,8 @@ func (cs *ConsensusState) addVote(
 
 					// we're getting the wrong block
 					cs.ProposalBlock = nil
+
+					cs.evsw.FireEvent(ctx, EventValidBlockValue, &cs.RoundState)
 				}
 			}
 		}
