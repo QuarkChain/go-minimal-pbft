@@ -55,6 +55,9 @@ func (bs *BlockSync) sync(ctx context.Context) error {
 			if resp.LastHeight > maxHeight {
 				maxHeight = resp.LastHeight
 				maxPeer = p
+			} else if maxHeight == 0 {
+				// random pick up one to sync latest message
+				maxPeer = p
 			}
 		}
 

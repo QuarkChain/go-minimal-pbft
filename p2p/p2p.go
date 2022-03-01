@@ -569,7 +569,7 @@ func (server *Server) Run(ctx context.Context) error {
 		}
 
 		if envelope.GetFrom() == server.Host.ID() {
-			log.Debug("received message from ourselves, ignoring",
+			log.Trace("received message from ourselves, ignoring",
 				"payload", envelope.Data)
 			p2pMessagesReceived.WithLabelValues("loopback").Inc()
 			continue

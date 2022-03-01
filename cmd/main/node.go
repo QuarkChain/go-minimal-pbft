@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"time"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/QuarkChain/go-minimal-pbft/p2p"
@@ -157,6 +158,9 @@ func runNode(cmd *cobra.Command, args []string) {
 	go func() {
 		p2pserver.Run(rootCtx)
 	}()
+
+	// TODO: make sure we have sufficient peer node to sync
+	time.Sleep(time.Second)
 
 	if len(vals) == 1 && pubVal != nil && vals[0] == pubVal.Address() {
 		log.Info("Running in self validator mode, skipping block sync")
