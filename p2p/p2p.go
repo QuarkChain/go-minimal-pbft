@@ -556,6 +556,8 @@ func (server *Server) Run(ctx context.Context) error {
 						err = th.Publish(ctx, data)
 						p2pMessagesSent.Inc()
 					}
+				case *consensus.ConsensusSyncRequest:
+					server.consensusSyncChan <- m
 				default:
 					log.Error("unrecognized data to sent")
 				}
