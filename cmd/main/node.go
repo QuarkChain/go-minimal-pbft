@@ -33,6 +33,7 @@ var (
 	datadir       *string
 	validatorSet  *[]string
 	genesisTimeMs *uint64
+	skipBlockSync *bool
 )
 
 var NodeCmd = &cobra.Command{
@@ -57,6 +58,7 @@ func init() {
 
 	validatorSet = NodeCmd.Flags().StringArray("validatorSet", []string{}, "List of validators")
 	genesisTimeMs = NodeCmd.Flags().Uint64("genesisTimeMs", 0, "Genesis block timestamp")
+	skipBlockSync = NodeCmd.Flags().Bool("skipBlockSync", false, "Skip block sync")
 }
 
 func runNode(cmd *cobra.Command, args []string) {
@@ -164,6 +166,8 @@ func runNode(cmd *cobra.Command, args []string) {
 
 	if len(vals) == 1 && pubVal != nil && vals[0] == pubVal.Address() {
 		log.Info("Running in self validator mode, skipping block sync")
+	} else if *skipBlockSync {
+		log.Info("Skipping block sync by config")
 	} else {
 		bs := p2p.NewBlockSync(p2pserver.Host, *gcs, bs, executor, obsvC)
 		bs.Start(rootCtx)
