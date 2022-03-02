@@ -145,6 +145,8 @@ type ConsensusState struct {
 
 	latestProposalMessage *ProposalMessage
 	latestVoteMessageMap  map[common.Address]*VoteMessage
+
+	consensusSyncRequestAsyncChan chan *consensusSyncRequestAsync
 }
 
 // NewState returns a new State.
@@ -499,6 +501,91 @@ func (cs *ConsensusState) sendInternalMessage(ctx context.Context, mi MsgInfo) {
 	}
 }
 
+func (cs *ConsensusState) createSyncRequest() *ConsensusSyncRequest {
+	round := cs.Round
+	if cs.Proposal != nil && cs.Proposal.POLRound != -1 && !cs.isProposalComplete() {
+		// make sure we collect enough prevotes for POLRound
+		// so that we could vote in this round
+		round = cs.LockedRound
+	}
+
+	hasProposal := uint8(0)
+	if cs.Proposal != nil {
+		hasProposal = 1
+	}
+
+	return &ConsensusSyncRequest{
+		height:           cs.Height,
+		round:            uint32(round),
+		hasProposal:      hasProposal,
+		prevotesBitmap:   cs.Votes.Prevotes(round).BitArray().Copy().Elems,
+		precommitsBitmap: cs.Votes.Precommits(round).BitArray().Copy().Elems,
+	}
+}
+
+func (cs *ConsensusState) ProcessSyncRequest(csq *ConsensusSyncRequest) ([]Message, error) {
+	respChan := make(chan []Message)
+
+	reqAsync := &consensusSyncRequestAsync{
+		req:      csq,
+		respChan: respChan,
+	}
+
+	cs.consensusSyncRequestAsyncChan <- reqAsync
+
+	// TODO: cancel
+	select {
+	case msgs := <-respChan:
+		return msgs, nil
+	}
+}
+
+func appendDiffVotes(vs *VoteSet, bm []uint64, msgs []Message) []Message {
+	if len(bm) != 0 {
+		prevoteBA, err := types.NewBitArrayFromUint64(vs.Size(), bm)
+		if err != nil {
+			// somewrong with bitmap size
+			return msgs
+		}
+		for i := 0; i < prevoteBA.Size(); i++ {
+			if prevoteBA.GetIndex(i) {
+				continue
+			}
+
+			msgs = append(msgs, &types.VoteMessage{Vote: vs.GetByIndex(int32(i))})
+		}
+	}
+	return msgs
+}
+
+func (cs *ConsensusState) processSyncRequest(csq *ConsensusSyncRequest) []Message {
+	var msgs []Message
+	if csq.height < cs.Height {
+		// we are ahead, only return precommits
+		commit := cs.blockStore.LoadBlockCommit(csq.height)
+		for i := 0; i < commit.Size(); i++ {
+			if commit.BitArray().GetIndex(i) {
+				msgs = append(msgs, &types.VoteMessage{Vote: commit.GetVote(int32(i))})
+			}
+		}
+		if csq.hasProposal == 0 {
+			msgs = append(msgs, &types.ProposalMessage{Proposal: &types.Proposal{Block: cs.blockStore.LoadBlock(cs.Height)}})
+		}
+		return msgs
+	} else if csq.height > cs.Height || csq.round > uint32(cs.Round) {
+		return []Message{}
+	}
+
+	// now csq.height == cs.height and csq.round <= cs.round
+	msgs = appendDiffVotes(cs.Votes.Prevotes(cs.Round), csq.prevotesBitmap, msgs)
+	msgs = appendDiffVotes(cs.Votes.Precommits(cs.Round), csq.precommitsBitmap, msgs)
+
+	if csq.hasProposal == 0 && cs.Proposal != nil {
+		msgs = append(msgs, &types.ProposalMessage{Proposal: cs.Proposal})
+	}
+	return msgs
+}
+
 func (cs *ConsensusState) broadcastMessageToPeers(ctx context.Context, msg Message) {
 	select {
 	case <-ctx.Done():
@@ -694,6 +781,9 @@ func (cs *ConsensusState) receiveRoutine(ctx context.Context, maxSteps int) {
 		}
 	}()
 
+	consensusSyncRequestTimer := time.NewTimer(cs.config.ConsensusSyncRequestDuration)
+	defer consensusSyncRequestTimer.Stop()
+
 	for {
 		if maxSteps > 0 {
 			if cs.nSteps >= maxSteps {
@@ -746,6 +836,14 @@ func (cs *ConsensusState) receiveRoutine(ctx context.Context, maxSteps int) {
 			// go to the next step
 			cs.handleTimeout(ctx, ti, rs)
 
+		case <-consensusSyncRequestTimer.C:
+			msg := cs.createSyncRequest()
+			cs.broadcastMessageToPeers(ctx, msg)
+
+			consensusSyncRequestTimer.Reset(cs.config.ConsensusSyncRequestDuration)
+		case syncReqAsync := <-cs.consensusSyncRequestAsyncChan:
+			// respChan is supposed to be non-blocking
+			syncReqAsync.respChan <- cs.processSyncRequest(syncReqAsync.req)
 		case <-ctx.Done():
 			onExit(cs)
 			return
@@ -809,20 +907,21 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 			cs.broadcastMessageToPeers(ctx, msg)
 		}
 
-		// if err == ErrAddingVote {
-		// TODO: punish peer
-		// We probably don't want to stop the peer here. The vote does not
-		// necessarily comes from a malicious peer but can be just broadcasted by
-		// a typical peer.
-		// https://github.com/tendermint/tendermint/issues/1281
-		// }
+	// if err == ErrAddingVote {
+	// TODO: punish peer
+	// We probably don't want to stop the peer here. The vote does not
+	// necessarily comes from a malicious peer but can be just broadcasted by
+	// a typical peer.
+	// https://github.com/tendermint/tendermint/issues/1281
+	// }
 
-		// NOTE: the vote is broadcast to peers by the reactor listening
-		// for vote events
+	// NOTE: the vote is broadcast to peers by the reactor listening
+	// for vote events
 
-		// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
-		// the peer is sending us CatchupCommit precommits.
-		// We could make note of this and help filter in broadcastHasVoteMessage().
+	// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
+	// the peer is sending us CatchupCommit precommits.
+	// We could make note of this and help filter in broadcastHasVoteMessage().
+	case *ConsensusSyncRequest:
 
 	default:
 		log.Error("unknown msg type", "type", fmt.Sprintf("%T", msg))
@@ -1063,7 +1162,6 @@ func (cs *ConsensusState) isProposalComplete() bool {
 	}
 	// if this is false the proposer is lying or we haven't received the POL yet
 	return cs.Votes.Prevotes(cs.Proposal.POLRound).HasTwoThirdsMajority()
-
 }
 
 // Create the next block to propose and return it. Returns nil block upon error.
@@ -1358,7 +1456,7 @@ func (cs *ConsensusState) enterCommit(ctx context.Context, height uint64, commit
 	// Move them over to ProposalBlock if they match the commit hash,
 	// otherwise they'll be cleared in updateToState.
 	if cs.LockedBlock.HashTo(blockID) {
-		log.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "height", height, "commit_round", commitRound, "current", "block_hash", blockID)
+		log.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "height", height, "commit_round", commitRound, "block_hash", blockID)
 		cs.ProposalBlock = cs.LockedBlock
 	}
 

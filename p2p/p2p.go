@@ -60,6 +60,7 @@ const (
 	TopicHello          = "/mpbft/dev/hello/1.0.0"
 	TopicFullBlock      = "/mpbft/dev/fullblock/1.0.0"
 	TopicLatestMessages = "/mpbft/dev/latest_messages/1.0.0"
+	TopicConsensusSync  = "/mpbft/dev/consensus_sync/1.0.0"
 )
 
 func init() {
@@ -291,15 +292,17 @@ func SendRPC(ctx context.Context, h host.Host, peer peer.ID, topic string, req i
 }
 
 type Server struct {
-	Host          host.Host
-	blockStore    consensus.BlockStore
-	obsvC         chan consensus.MsgInfo
-	sendC         chan consensus.Message
-	priv          crypto.PrivKey
-	port          uint
-	networkID     string
-	nodeName      string
-	rootCtxCancel context.CancelFunc
+	Host              host.Host
+	ctx               context.Context
+	consensusSyncChan chan *consensus.ConsensusSyncRequest
+	blockStore        consensus.BlockStore
+	obsvC             chan consensus.MsgInfo
+	sendC             chan consensus.Message
+	priv              crypto.PrivKey
+	port              uint
+	networkID         string
+	nodeName          string
+	rootCtxCancel     context.CancelFunc
 }
 
 func NewP2PServer(
@@ -469,15 +472,17 @@ func NewP2PServer(
 		"addrs", fmt.Sprintf("%v", h.Addrs()))
 
 	return &Server{
-		Host:          h,
-		blockStore:    blockStore,
-		obsvC:         obsvC,
-		sendC:         sendC,
-		priv:          priv,
-		port:          port,
-		networkID:     networkID,
-		nodeName:      nodeName,
-		rootCtxCancel: rootCtxCancel,
+		Host:              h,
+		ctx:               ctx,
+		consensusSyncChan: make(chan *consensus.ConsensusSyncRequest),
+		blockStore:        blockStore,
+		obsvC:             obsvC,
+		sendC:             sendC,
+		priv:              priv,
+		port:              port,
+		networkID:         networkID,
+		nodeName:          nodeName,
+		rootCtxCancel:     rootCtxCancel,
 	}, nil
 }
 
@@ -661,4 +666,59 @@ func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {
 			return
 		}
 	})
+
+	server.Host.SetStreamHandler(TopicConsensusSync, func(stream network.Stream) {
+		defer stream.Close()
+
+		data, err := ReadMsgWithPrependedSize(stream)
+		if err != nil {
+			return
+		}
+
+		var req consensus.ConsensusSyncRequest
+
+		err = rlp.DecodeBytes(data, &req)
+		if err != nil {
+			return
+		}
+
+		log.Debug("received consensus_sync_req",
+			"payload", data,
+			"raw", data)
+
+		msgs, err := cs.ProcessSyncRequest(&req)
+		if err != nil {
+			return
+		}
+
+		resp := consensus.ConsensusSyncResponse{}
+
+		for _, lmsg := range msgs {
+			var data []byte
+			var err error
+
+			switch m := (lmsg).(type) {
+			case *consensus.ProposalMessage:
+				data, err = encode(m.Proposal)
+			case *consensus.VoteMessage:
+				data, err = encode(m.Vote)
+			}
+			if err != nil {
+				return
+			}
+			resp.MessageData = append(resp.MessageData, data)
+		}
+
+		respData, err := rlp.EncodeToBytes(&resp)
+		if err != nil {
+			return
+		}
+
+		err = WriteMsgWithPrependedSize(stream, respData)
+		if err != nil {
+			return
+		}
+	})
+
+	go server.consensSyncRoutine()
 }

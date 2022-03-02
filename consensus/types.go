@@ -67,3 +67,27 @@ func CanonicalNowMs() int64 {
 func Canonical(t time.Time) time.Time {
 	return t.Round(0).UTC()
 }
+
+// Ask for consensus sync to another peer
+// The consensus will response with a list of votes and possible proposal
+type ConsensusSyncRequest struct {
+	height           uint64
+	round            uint32
+	hasProposal      uint8 // whether the proposal is received
+	prevotesBitmap   []uint64
+	precommitsBitmap []uint64
+}
+
+// Internal struct to request async
+type consensusSyncRequestAsync struct {
+	req      *ConsensusSyncRequest
+	respChan chan []Message
+}
+
+type ConsensusSyncResponse struct {
+	MessageData [][]byte
+}
+
+func (csr *ConsensusSyncRequest) ValidateBasic() error {
+	return nil
+}

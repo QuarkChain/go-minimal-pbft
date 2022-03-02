@@ -34,23 +34,26 @@ type ConsensusConfig struct {
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
+	ConsensusSyncRequestDuration time.Duration
+
 	DoubleSignCheckHeight uint64 `mapstructure:"double-sign-check-height"`
 }
 
 func NewDefaultConsesusConfig() *ConsensusConfig {
 	return &ConsensusConfig{
 		// WalPath:                     filepath.Join(defaultDataDir, "cs.wal", "wal"),
-		TimeoutPropose:              3000 * time.Millisecond,
-		TimeoutProposeDelta:         500 * time.Millisecond,
-		TimeoutPrevote:              1000 * time.Millisecond,
-		TimeoutPrevoteDelta:         500 * time.Millisecond,
-		TimeoutPrecommit:            1000 * time.Millisecond,
-		TimeoutPrecommitDelta:       500 * time.Millisecond,
-		TimeoutCommit:               1000 * time.Millisecond,
-		SkipTimeoutCommit:           false,
-		PeerGossipSleepDuration:     100 * time.Millisecond,
-		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
-		DoubleSignCheckHeight:       uint64(0),
+		TimeoutPropose:               3000 * time.Millisecond,
+		TimeoutProposeDelta:          500 * time.Millisecond,
+		TimeoutPrevote:               1000 * time.Millisecond,
+		TimeoutPrevoteDelta:          500 * time.Millisecond,
+		TimeoutPrecommit:             1000 * time.Millisecond,
+		TimeoutPrecommitDelta:        500 * time.Millisecond,
+		TimeoutCommit:                1000 * time.Millisecond,
+		SkipTimeoutCommit:            false,
+		PeerGossipSleepDuration:      100 * time.Millisecond,
+		PeerQueryMaj23SleepDuration:  2000 * time.Millisecond,
+		DoubleSignCheckHeight:        uint64(0),
+		ConsensusSyncRequestDuration: 500 * time.Millisecond,
 	}
 }
 
