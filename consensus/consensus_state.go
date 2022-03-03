@@ -585,9 +585,16 @@ func (cs *ConsensusState) processCommitedBlock(ctx context.Context, block *FullB
 		log.Error("failed to get private validator pubkey", "height", height, "err", err)
 	}
 
-	// cs.StartTime is already set.
-	// Schedule Round0 to start soon.
-	cs.scheduleRound0(&cs.RoundState)
+	// if we can skip timeoutCommit and have all the votes now,
+	if cs.config.SkipTimeoutCommit && cs.LastCommit.HasAll() {
+		// go straight to new round (skip timeout commit)
+		// cs.scheduleTimeout(time.Duration(0), cs.Height, 0, RoundStepNewHeight)
+		cs.enterNewRound(ctx, cs.Height, 0)
+	} else {
+		// cs.StartTime is already set.
+		// Schedule Round0 to start soon.
+		cs.scheduleRound0(&cs.RoundState)
+	}
 
 	// By here,
 	// * cs.Height has been increment to height+1
