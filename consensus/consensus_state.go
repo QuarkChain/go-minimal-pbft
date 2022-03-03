@@ -526,17 +526,7 @@ func (cs *ConsensusState) processCommitedBlock(ctx context.Context, block *FullB
 		return
 	}
 
-	if cs.Proposal != nil {
-		// do not interference with consensus if proposal is known.
-		// TODO: may send commit to vote set directly
-		log.Info("processing at block height alread with proposal", "height", height)
-		return
-	}
-
-	cs.updateRoundStep(cs.Round, RoundStepCommit)
-
 	// fast-path for commit
-
 	if err := cs.blockExec.ValidateBlock(cs.chainState, block); err != nil {
 		log.Info("validate eorr")
 		return
@@ -547,6 +537,8 @@ func (cs *ConsensusState) processCommitedBlock(ctx context.Context, block *FullB
 		log.Info("verify error")
 		return
 	}
+
+	cs.updateRoundStep(cs.Round, RoundStepCommit)
 
 	// calculate last commit vote set directly
 	// note that updateToState() will check existing cs.LastCommit if CommitRound is -1.
