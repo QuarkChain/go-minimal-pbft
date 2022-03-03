@@ -6,6 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
@@ -34,6 +36,7 @@ var (
 	validatorSet  *[]string
 	genesisTimeMs *uint64
 	skipBlockSync *bool
+	powerStr      *string
 )
 
 var NodeCmd = &cobra.Command{
@@ -59,6 +62,7 @@ func init() {
 	validatorSet = NodeCmd.Flags().StringArray("validatorSet", []string{}, "List of validators")
 	genesisTimeMs = NodeCmd.Flags().Uint64("genesisTimeMs", 0, "Genesis block timestamp")
 	skipBlockSync = NodeCmd.Flags().Bool("skipBlockSync", false, "Skip block sync")
+	powerStr = NodeCmd.Flags().String("valPowers", "", "comma seperated voting powers")
 }
 
 func runNode(cmd *cobra.Command, args []string) {
@@ -137,14 +141,36 @@ func runNode(cmd *cobra.Command, args []string) {
 		vals[i] = addr
 	}
 
+	powers := make([]int64, len(vals))
+	if *powerStr == "" {
+		log.Info("Set all validator power = 1")
+		for i := 0; i < len(powers); i++ {
+			powers[i] = 1
+		}
+	} else {
+		ss := strings.Split(*powerStr, ",")
+		if len(ss) != len(powers) {
+			log.Error("Invalid power string", "str", *powerStr)
+			return
+		}
+		for i, s := range ss {
+			p, err := strconv.Atoi(s)
+			powers[i] = int64(p)
+			if err != nil {
+				log.Error("Invalid power string", "err", err)
+				return
+			}
+		}
+	}
+
 	if pubVal != nil && !found {
 		log.Error("Current validator is not in validator set")
 		return
 	} else {
-		log.Info("Validators", "vals", vals)
+		log.Info("Validators", "vals", vals, "powers", powers)
 	}
 
-	gcs := consensus.MakeGenesisChainState("test", *genesisTimeMs, vals, 128, 8)
+	gcs := consensus.MakeGenesisChainState("test", *genesisTimeMs, vals, powers, 128, 8)
 
 	db, err := leveldb.OpenFile(*datadir, &opt.Options{ErrorIfExist: true})
 	if err != nil {

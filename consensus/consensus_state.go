@@ -1711,7 +1711,7 @@ func (cs *ConsensusState) defaultSetProposal(ctx context.Context, proposal *Prop
 
 	cs.Proposal = proposal
 	cs.ProposalBlock = proposal.Block
-	log.Info("Received proposal", "proposal", proposal)
+	log.Info("Received proposal", "height", cs.Height, "round", cs.Round, "from", cs.Validators.GetProposer().Address)
 
 	// Update Valid* if we can.
 	prevotes := cs.Votes.Prevotes(cs.Round)

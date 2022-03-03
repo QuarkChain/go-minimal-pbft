@@ -122,6 +122,7 @@ type weightedTime struct {
 // computed value.
 func MedianTime(commit *Commit, validators *ValidatorSet) uint64 {
 	weightedTimes := make([]*weightedTime, len(commit.Signatures))
+	totalVotingPower := int64(0)
 
 	for i, commitSig := range commit.Signatures {
 		if commitSig.Absent() {
@@ -130,12 +131,12 @@ func MedianTime(commit *Commit, validators *ValidatorSet) uint64 {
 		_, validator := validators.GetByAddress(commitSig.ValidatorAddress)
 		// If there's no condition, TestValidateBlockCommit panics; not needed normally.
 		if validator != nil {
-			// totalVotingPower += validator.VotingPower
-			weightedTimes[i] = &weightedTime{TimeMs: commitSig.TimestampMs, Weight: 1}
+			totalVotingPower += validator.VotingPower
+			weightedTimes[i] = &weightedTime{TimeMs: commitSig.TimestampMs, Weight: validator.VotingPower}
 		}
 	}
 
-	return weightedMedian(weightedTimes, int64(len(commit.Signatures)))
+	return weightedMedian(weightedTimes, totalVotingPower)
 }
 
 // weightedMedian computes weighted median time for a given array of WeightedTime and the total voting power.
@@ -167,7 +168,7 @@ func weightedMedian(weightedTimes []*weightedTime, totalVotingPower int64) (res 
 func (be *DefaultBlockExecutor) ApplyBlock(ctx context.Context, state ChainState, block *FullBlock) (ChainState, error) {
 	// TOOD: execute the block & new validator change
 	// Update the state with the block and responses.
-	state, err := updateState(state, block.Hash(), block, []common.Address{})
+	state, err := updateState(state, block.Hash(), block, []common.Address{}, []int64{})
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %v", err)
 	}
@@ -180,6 +181,7 @@ func updateState(
 	blockID common.Hash,
 	block *FullBlock,
 	nextValidators []common.Address,
+	nextVotingPowers []int64,
 ) (ChainState, error) {
 
 	// Copy the valset so we can apply changes from EndBlock
@@ -187,7 +189,8 @@ func updateState(
 	nValSet := state.NextValidators.Copy()
 
 	if len(nextValidators) != 0 {
-		nValSet = NewValidatorSet(nextValidators, nValSet.ProposerReptition)
+		// TODO: sanity check
+		nValSet = NewValidatorSet(nextValidators, nextVotingPowers, nValSet.ProposerReptition)
 	}
 
 	// Update validator proposer priority and set state variables.

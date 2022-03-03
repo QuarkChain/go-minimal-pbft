@@ -79,8 +79,8 @@ func (state ChainState) Copy() ChainState {
 	}
 }
 
-func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs []common.Address, epoch uint64, proposerReptition int64) *ChainState {
-	vs := NewValidatorSet(validatorAddrs, proposerReptition)
+func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs []common.Address, votingPowers []int64, epoch uint64, proposerReptition int64) *ChainState {
+	vs := NewValidatorSet(validatorAddrs, votingPowers, proposerReptition)
 	nextVs := vs.Copy()
 	nextVs.IncrementProposerPriority(1)
 	return &ChainState{
