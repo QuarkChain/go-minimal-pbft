@@ -40,6 +40,7 @@ type ConsensusConfig struct {
 }
 
 func NewDefaultConsesusConfig() *ConsensusConfig {
+	// Config from tendermint except TimeoutCommit is 5s (original 1s)
 	return &ConsensusConfig{
 		// WalPath:                     filepath.Join(defaultDataDir, "cs.wal", "wal"),
 		TimeoutPropose:               3000 * time.Millisecond,
@@ -48,7 +49,7 @@ func NewDefaultConsesusConfig() *ConsensusConfig {
 		TimeoutPrevoteDelta:          500 * time.Millisecond,
 		TimeoutPrecommit:             1000 * time.Millisecond,
 		TimeoutPrecommitDelta:        500 * time.Millisecond,
-		TimeoutCommit:                1000 * time.Millisecond,
+		TimeoutCommit:                5000 * time.Millisecond,
 		SkipTimeoutCommit:            false,
 		PeerGossipSleepDuration:      100 * time.Millisecond,
 		PeerQueryMaj23SleepDuration:  2000 * time.Millisecond,
