@@ -52,15 +52,14 @@ var (
 )
 
 const (
-	MsgProposal         = 0x01
-	MsgVote             = 0x02
-	MsgVerifiedBlock    = 0x03
-	MsgHelloRequest     = 0x04
-	MsgHelloResponse    = 0x05
-	TopicHello          = "/mpbft/dev/hello/1.0.0"
-	TopicFullBlock      = "/mpbft/dev/fullblock/1.0.0"
-	TopicLatestMessages = "/mpbft/dev/latest_messages/1.0.0"
-	TopicConsensusSync  = "/mpbft/dev/consensus_sync/1.0.0"
+	MsgProposal        = 0x01
+	MsgVote            = 0x02
+	MsgVerifiedBlock   = 0x03
+	MsgHelloRequest    = 0x04
+	MsgHelloResponse   = 0x05
+	TopicHello         = "/mpbft/dev/hello/1.0.0"
+	TopicFullBlock     = "/mpbft/dev/fullblock/1.0.0"
+	TopicConsensusSync = "/mpbft/dev/consensus_sync/1.0.0"
 )
 
 func init() {
@@ -621,55 +620,6 @@ func (server *Server) Run(ctx context.Context) error {
 
 func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {
 	server.consensusState = cs
-	server.Host.SetStreamHandler(TopicLatestMessages, func(stream network.Stream) {
-		defer stream.Close()
-
-		data, err := ReadMsgWithPrependedSize(stream)
-		if err != nil {
-			return
-		}
-
-		var msg GetLatestMessagesRequest
-
-		err = rlp.DecodeBytes(data, &msg)
-		if err != nil {
-			return
-		}
-
-		log.Debug("received latest_message_req",
-			"payload", data,
-			"raw", data)
-
-		msgs := cs.GetLatestMessages()
-
-		var resp GetLatestMessagesResponse
-
-		for _, lmsg := range msgs {
-			var data []byte
-			var err error
-
-			switch m := (lmsg).(type) {
-			case *consensus.ProposalMessage:
-				data, err = encode(m.Proposal)
-			case *consensus.VoteMessage:
-				data, err = encode(m.Vote)
-			}
-			if err != nil {
-				return
-			}
-			resp.MessageData = append(resp.MessageData, data)
-		}
-
-		respData, err := rlp.EncodeToBytes(&resp)
-		if err != nil {
-			return
-		}
-
-		err = WriteMsgWithPrependedSize(stream, respData)
-		if err != nil {
-			return
-		}
-	})
 
 	server.Host.SetStreamHandler(TopicConsensusSync, func(stream network.Stream) {
 		defer stream.Close()
@@ -686,14 +636,11 @@ func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {
 			return
 		}
 
-		log.Info("csq", "csq", &req)
-
 		log.Debug("received consensus_sync_req",
-			"payload", data,
-			"raw", data)
+			"req", &req,
+			"payload", data)
 
 		msgs, err := cs.ProcessSyncRequest(&req)
-		log.Info("csq done", "csq", &req)
 
 		if err != nil {
 			return

@@ -139,9 +139,6 @@ type ConsensusState struct {
 	// wait the channel event happening for shutting down the state gracefully
 	onStopCh chan *RoundState
 
-	latestProposalMessage *ProposalMessage
-	latestVoteMessageMap  map[common.Address]*VoteMessage
-
 	consensusSyncRequestAsyncChan chan *consensusSyncRequestAsync
 	committedBlockChan            chan *FullBlock
 }
@@ -192,8 +189,6 @@ func NewConsensusState(
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()
 
 	cs.BaseService = *NewBaseService("State", cs)
-
-	cs.latestVoteMessageMap = make(map[common.Address]*VoteMessage)
 
 	return cs
 }
@@ -609,7 +604,7 @@ func (cs *ConsensusState) processCommitedBlock(ctx context.Context, block *FullB
 }
 
 func (cs *ConsensusState) ProcessSyncRequest(csq *ConsensusSyncRequest) ([]interface{}, error) {
-	log.Debug("Processing sync req", "req", req)
+	log.Debug("Processing sync req", "req", csq)
 	respChan := make(chan []interface{})
 
 	reqAsync := &consensusSyncRequestAsync{
@@ -955,20 +950,6 @@ func (cs *ConsensusState) receiveRoutine(ctx context.Context, maxSteps int) {
 	}
 }
 
-func (cs *ConsensusState) GetLatestMessages() []Message {
-	cs.mtx.Lock()
-	defer cs.mtx.Unlock()
-
-	var msgs []Message
-	if cs.latestProposalMessage != nil {
-		msgs = append(msgs, cs.latestProposalMessage)
-	}
-	for _, v := range cs.latestVoteMessageMap {
-		msgs = append(msgs, v)
-	}
-	return msgs
-}
-
 // state transitions on complete-proposal, 2/3-any, 2/3-one
 func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 	cs.mtx.Lock()
@@ -988,7 +969,6 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 		added, err = cs.setProposal(ctx, msg.Proposal)
 
 		if added {
-			cs.latestProposalMessage = msg
 			// broadcast the proposal to peer
 			cs.broadcastMessageToPeers(ctx, msg)
 		}
@@ -998,7 +978,6 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
 		added, err = cs.tryAddVote(ctx, msg.Vote, string(peerID))
 		if added {
-			cs.latestVoteMessageMap[msg.Vote.ValidatorAddress] = msg
 			// broadcast the vote to peer
 			cs.broadcastMessageToPeers(ctx, msg)
 		}
