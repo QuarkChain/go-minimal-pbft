@@ -294,6 +294,7 @@ func SendRPC(ctx context.Context, h host.Host, peer peer.ID, topic string, req i
 type Server struct {
 	Host              host.Host
 	ctx               context.Context
+	consensusState    *consensus.ConsensusState
 	consensusSyncChan chan *consensus.ConsensusSyncRequest
 	blockStore        consensus.BlockStore
 	obsvC             chan consensus.MsgInfo
@@ -619,6 +620,7 @@ func (server *Server) Run(ctx context.Context) error {
 }
 
 func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {
+	server.consensusState = cs
 	server.Host.SetStreamHandler(TopicLatestMessages, func(stream network.Stream) {
 		defer stream.Close()
 
@@ -684,31 +686,49 @@ func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {
 			return
 		}
 
+		log.Info("csq", "csq", &req)
+
 		log.Debug("received consensus_sync_req",
 			"payload", data,
 			"raw", data)
 
 		msgs, err := cs.ProcessSyncRequest(&req)
+		log.Info("csq done", "csq", &req)
+
 		if err != nil {
 			return
 		}
 
 		resp := consensus.ConsensusSyncResponse{}
 
-		for _, lmsg := range msgs {
-			var data []byte
-			var err error
+		if len(msgs) == 1 {
+			fb, ok0 := msgs[0].(*consensus.FullBlock)
+			if ok0 {
+				resp.IsCommited = 1
+				bs0, err := fb.EncodeToRLPBytes()
+				if err != nil {
+					return
+				}
+				resp.MessageData = append(resp.MessageData, bs0)
+			}
+		}
 
-			switch m := (lmsg).(type) {
-			case *consensus.ProposalMessage:
-				data, err = encode(m.Proposal)
-			case *consensus.VoteMessage:
-				data, err = encode(m.Vote)
+		if resp.IsCommited == 0 {
+			for _, lmsg := range msgs {
+				var data []byte
+				var err error
+
+				switch m := (lmsg).(type) {
+				case *consensus.ProposalMessage:
+					data, err = encode(m.Proposal)
+				case *consensus.VoteMessage:
+					data, err = encode(m.Vote)
+				}
+				if err != nil {
+					return
+				}
+				resp.MessageData = append(resp.MessageData, data)
 			}
-			if err != nil {
-				return
-			}
-			resp.MessageData = append(resp.MessageData, data)
 		}
 
 		respData, err := rlp.EncodeToBytes(&resp)

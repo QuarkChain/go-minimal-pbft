@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
@@ -105,30 +104,30 @@ func (bs *BlockSync) sync(ctx context.Context) error {
 		return nil
 	}
 
-	req := &GetLatestMessagesRequest{}
-	resp := &GetLatestMessagesResponse{}
-	if err := SendRPC(ctx, bs.h, maxPeer, TopicLatestMessages, req, resp); err != nil {
-		return err
-	}
+	// req := &GetLatestMessagesRequest{}
+	// resp := &GetLatestMessagesResponse{}
+	// if err := SendRPC(ctx, bs.h, maxPeer, TopicLatestMessages, req, resp); err != nil {
+	// 	return err
+	// }
 
-	for _, msgData := range resp.MessageData {
-		msg, err := decode(msgData)
-		if err != nil {
-			return err
-		}
+	// for _, msgData := range resp.MessageData {
+	// 	msg, err := decode(msgData)
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		log.Info("add latest message", "msg", msg)
+	// 	log.Info("add latest message", "msg", msg)
 
-		// TODO: add in goroutine if full
-		switch m := msg.(type) {
-		case *consensus.Proposal:
-			bs.obsvC <- consensus.MsgInfo{Msg: &consensus.ProposalMessage{m}, PeerID: maxPeer.String()}
-		case *consensus.Vote:
-			bs.obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{m}, PeerID: maxPeer.String()}
-		default:
-			return fmt.Errorf("unknown type")
-		}
-	}
+	// 	// TODO: add in goroutine if full
+	// 	switch m := msg.(type) {
+	// 	case *consensus.Proposal:
+	// 		bs.obsvC <- consensus.MsgInfo{Msg: &consensus.ProposalMessage{m}, PeerID: maxPeer.String()}
+	// 	case *consensus.Vote:
+	// 		bs.obsvC <- consensus.MsgInfo{Msg: &consensus.VoteMessage{m}, PeerID: maxPeer.String()}
+	// 	default:
+	// 		return fmt.Errorf("unknown type")
+	// 	}
+	// }
 
 	return nil
 }

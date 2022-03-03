@@ -86,6 +86,21 @@ func TestSerdeBlock(t *testing.T) {
 	assert.Equal(t, b.LastCommit, nb.LastCommit)
 }
 
+func TestSerdeConsensusSyncRequest(t *testing.T) {
+	req := &ConsensusSyncRequest{
+		Height:           152,
+		Round:            1356,
+		HasProposal:      1,
+		PrevotesBitmap:   []uint64{3},
+		PrecommitsBitmap: []uint64{2},
+	}
+
+	bs, _ := rlp.EncodeToBytes(req)
+	nreq := &ConsensusSyncRequest{}
+	rlp.DecodeBytes(bs, nreq)
+	assert.Equal(t, req, nreq)
+}
+
 func TestVoteSignBytes(t *testing.T) {
 	v := Vote{
 		Type:             PrecommitType,

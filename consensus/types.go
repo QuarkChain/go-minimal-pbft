@@ -71,20 +71,21 @@ func Canonical(t time.Time) time.Time {
 // Ask for consensus sync to another peer
 // The consensus will response with a list of votes and possible proposal
 type ConsensusSyncRequest struct {
-	height           uint64
-	round            uint32
-	hasProposal      uint8 // whether the proposal is received
-	prevotesBitmap   []uint64
-	precommitsBitmap []uint64
+	Height           uint64
+	Round            uint32
+	HasProposal      uint8 // whether the proposal is received
+	PrevotesBitmap   []uint64
+	PrecommitsBitmap []uint64
 }
 
 // Internal struct to request async
 type consensusSyncRequestAsync struct {
 	req      *ConsensusSyncRequest
-	respChan chan []Message
+	respChan chan []interface{}
 }
 
 type ConsensusSyncResponse struct {
+	IsCommited  uint8 // whether return a commited block or proposal/vote messages
 	MessageData [][]byte
 }
 

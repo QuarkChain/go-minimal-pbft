@@ -114,10 +114,6 @@ type ConsensusState struct {
 	timeoutTicker    TimeoutTicker
 	peerOutMsgQueue  chan Message
 
-	// information about about added votes and block parts are written on this channel
-	// so statistics can be computed by reactor
-	statsMsgQueue chan MsgInfo
-
 	// a Write-Ahead Log ensures we can recover from any kind of crash
 	// and helps us avoid signing conflicting votes
 	// wal          WAL
@@ -147,6 +143,7 @@ type ConsensusState struct {
 	latestVoteMessageMap  map[common.Address]*VoteMessage
 
 	consensusSyncRequestAsyncChan chan *consensusSyncRequestAsync
+	committedBlockChan            chan *FullBlock
 }
 
 // NewState returns a new State.
@@ -163,16 +160,17 @@ func NewConsensusState(
 	// options ...StateOption,
 ) *ConsensusState {
 	cs := &ConsensusState{
-		config:           cfg,
-		blockExec:        blockExec,
-		blockStore:       blockStore,
-		peerInMsgQueue:   peerInMsgQueue,
-		peerOutMsgQueue:  peerOutMsgQueue,
-		internalMsgQueue: make(chan MsgInfo, msgQueueSize),
-		timeoutTicker:    NewTimeoutTicker(),
-		statsMsgQueue:    make(chan MsgInfo, msgQueueSize),
-		done:             make(chan struct{}),
-		doWALCatchup:     true,
+		config:                        cfg,
+		blockExec:                     blockExec,
+		blockStore:                    blockStore,
+		peerInMsgQueue:                peerInMsgQueue,
+		peerOutMsgQueue:               peerOutMsgQueue,
+		internalMsgQueue:              make(chan MsgInfo, msgQueueSize),
+		timeoutTicker:                 NewTimeoutTicker(),
+		consensusSyncRequestAsyncChan: make(chan *consensusSyncRequestAsync, msgQueueSize),
+		committedBlockChan:            make(chan *FullBlock, msgQueueSize),
+		done:                          make(chan struct{}),
+		doWALCatchup:                  true,
 		// wal:              nilWAL{},
 		// evpool:   evpool,
 		onStopCh: make(chan *RoundState),
@@ -515,16 +513,104 @@ func (cs *ConsensusState) createSyncRequest() *ConsensusSyncRequest {
 	}
 
 	return &ConsensusSyncRequest{
-		height:           cs.Height,
-		round:            uint32(round),
-		hasProposal:      hasProposal,
-		prevotesBitmap:   cs.Votes.Prevotes(round).BitArray().Copy().Elems,
-		precommitsBitmap: cs.Votes.Precommits(round).BitArray().Copy().Elems,
+		Height:           cs.Height,
+		Round:            uint32(round),
+		HasProposal:      hasProposal,
+		PrevotesBitmap:   cs.Votes.Prevotes(round).BitArray().Copy().Elems,
+		PrecommitsBitmap: cs.Votes.Precommits(round).BitArray().Copy().Elems,
 	}
 }
 
-func (cs *ConsensusState) ProcessSyncRequest(csq *ConsensusSyncRequest) ([]Message, error) {
-	respChan := make(chan []Message)
+func (cs *ConsensusState) ProcessCommittedBlock(fb *FullBlock) {
+	cs.committedBlockChan <- fb
+}
+
+func (cs *ConsensusState) processCommitedBlock(ctx context.Context, block *FullBlock) {
+	height := block.NumberU64()
+	if block.NumberU64() != cs.Height {
+		return
+	}
+
+	if cs.Proposal != nil {
+		// do not interference with consensus if proposal is known.
+		// TODO: may send commit to vote set directly
+		log.Info("processing at block height alread with proposal", "height", height)
+		return
+	}
+
+	cs.updateRoundStep(cs.Round, RoundStepCommit)
+
+	// fast-path for commit
+
+	if err := cs.blockExec.ValidateBlock(cs.chainState, block); err != nil {
+		log.Info("validate eorr")
+		return
+	}
+
+	if err := cs.chainState.Validators.VerifyCommit(
+		cs.chainState.ChainID, block.Hash(), block.NumberU64(), block.Header().Commit); err != nil {
+		log.Info("verify error")
+		return
+	}
+
+	// calculate last commit vote set directly
+	// note that updateToState() will check existing cs.LastCommit if CommitRound is -1.
+	cs.CommitRound = -1 // no votes
+	cs.LastCommit = CommitToVoteSet(cs.chainState.ChainID, block.Commit(), cs.chainState.Validators)
+	cs.CommitTime = CanonicalNow()
+
+	log.Info(
+		"Finalizing commit of block",
+		"height", block.NumberU64(),
+		"hash", block.Hash(),
+		// "root", block.AppHash,
+		// "num_txs", len(block.Txs),
+	)
+
+	log.Debug(fmt.Sprintf("%v", block), "height", block.NumberU64())
+
+	// Save to blockStore.
+	if cs.blockStore.Height() < block.NumberU64() {
+		// NOTE: the seenCommit is local justification to commit this block,
+		// but may differ from the LastCommit included in the next block
+		cs.blockStore.SaveBlock(block, block.Commit())
+	} else {
+		// Happens during replay if we already saved the block but didn't commit
+		log.Debug("calling finalizeCommit on already stored block", "height", block.Number)
+	}
+
+	// Create a copy of the state for staging and an event cache for txs.
+	stateCopy := cs.chainState.Copy()
+
+	// Execute and commit the block, update and save the state, and update the mempool.
+	// NOTE The block.AppHash wont reflect these txs until the next block.
+	stateCopy, err := cs.blockExec.ApplyBlock(ctx, stateCopy, block)
+	if err != nil {
+		log.Error("failed to apply block", "height", height, "err", err)
+		return
+	}
+
+	// NewHeightStep!
+	cs.updateToState(ctx, stateCopy)
+
+	// Private validator might have changed it's key pair => refetch pubkey.
+	if err := cs.updatePrivValidatorPubKey(); err != nil {
+		log.Error("failed to get private validator pubkey", "height", height, "err", err)
+	}
+
+	// cs.StartTime is already set.
+	// Schedule Round0 to start soon.
+	cs.scheduleRound0(&cs.RoundState)
+
+	// By here,
+	// * cs.Height has been increment to height+1
+	// * cs.Step is now RoundStepNewHeight
+	// * cs.StartTime is set to when we will start round0.
+}
+
+func (cs *ConsensusState) ProcessSyncRequest(csq *ConsensusSyncRequest) ([]interface{}, error) {
+	log.Debug("Processing sync req", "req", req)
+	respChan := make(chan []interface{})
 
 	reqAsync := &consensusSyncRequestAsync{
 		req:      csq,
@@ -536,11 +622,13 @@ func (cs *ConsensusState) ProcessSyncRequest(csq *ConsensusSyncRequest) ([]Messa
 	// TODO: cancel
 	select {
 	case msgs := <-respChan:
+		log.Debug("Processed req", "msgs", msgs)
+
 		return msgs, nil
 	}
 }
 
-func appendDiffVotes(vs *VoteSet, bm []uint64, msgs []Message) []Message {
+func appendDiffVotes(vs *VoteSet, bm []uint64, msgs []interface{}) []interface{} {
 	if len(bm) != 0 {
 		prevoteBA, err := types.NewBitArrayFromUint64(vs.Size(), bm)
 		if err != nil {
@@ -552,37 +640,49 @@ func appendDiffVotes(vs *VoteSet, bm []uint64, msgs []Message) []Message {
 				continue
 			}
 
+			if !vs.BitArray().GetIndex(i) {
+				continue
+			}
+
 			msgs = append(msgs, &types.VoteMessage{Vote: vs.GetByIndex(int32(i))})
 		}
 	}
 	return msgs
 }
 
-func (cs *ConsensusState) processSyncRequest(csq *ConsensusSyncRequest) []Message {
-	var msgs []Message
-	if csq.height < cs.Height {
-		// we are ahead, only return precommits
-		commit := cs.blockStore.LoadBlockCommit(csq.height)
-		for i := 0; i < commit.Size(); i++ {
-			if commit.BitArray().GetIndex(i) {
-				msgs = append(msgs, &types.VoteMessage{Vote: commit.GetVote(int32(i))})
-			}
-		}
-		if csq.hasProposal == 0 {
-			msgs = append(msgs, &types.ProposalMessage{Proposal: &types.Proposal{Block: cs.blockStore.LoadBlock(cs.Height)}})
-		}
+func (cs *ConsensusState) processSyncRequest(csq *ConsensusSyncRequest) []interface{} {
+	var msgs []interface{}
+	if csq.Height < cs.chainState.InitialHeight {
+		// nothing to have
 		return msgs
-	} else if csq.height > cs.Height || csq.round > uint32(cs.Round) {
-		return []Message{}
+	} else if csq.Height < cs.Height {
+		// return commit
+		if csq.HasProposal == 0 {
+			// return block and commit directly
+			fb := cs.blockStore.LoadBlock(csq.Height)
+			fb = fb.WithCommit(cs.blockStore.LoadBlockCommit(csq.Height))
+			return []interface{}{fb}
+		} else {
+			// we are ahead and the peer has proposal, only return precommits
+			commit := cs.blockStore.LoadBlockCommit(csq.Height)
+			for i := 0; i < commit.Size(); i++ {
+				if commit.BitArray().GetIndex(i) {
+					msgs = append(msgs, &types.VoteMessage{Vote: commit.GetVote(int32(i))})
+				}
+			}
+			return msgs
+		}
+	} else if csq.Height > cs.Height || csq.Round > uint32(cs.Round) {
+		return []interface{}{}
 	}
 
 	// now csq.height == cs.height and csq.round <= cs.round
-	msgs = appendDiffVotes(cs.Votes.Prevotes(cs.Round), csq.prevotesBitmap, msgs)
-	msgs = appendDiffVotes(cs.Votes.Precommits(cs.Round), csq.precommitsBitmap, msgs)
-
-	if csq.hasProposal == 0 && cs.Proposal != nil {
+	if csq.HasProposal == 0 && cs.Proposal != nil {
 		msgs = append(msgs, &types.ProposalMessage{Proposal: cs.Proposal})
 	}
+	msgs = appendDiffVotes(cs.Votes.Prevotes(cs.Round), csq.PrevotesBitmap, msgs)
+	msgs = appendDiffVotes(cs.Votes.Precommits(cs.Round), csq.PrecommitsBitmap, msgs)
+
 	return msgs
 }
 
@@ -844,6 +944,8 @@ func (cs *ConsensusState) receiveRoutine(ctx context.Context, maxSteps int) {
 		case syncReqAsync := <-cs.consensusSyncRequestAsyncChan:
 			// respChan is supposed to be non-blocking
 			syncReqAsync.respChan <- cs.processSyncRequest(syncReqAsync.req)
+		case commitedBlock := <-cs.committedBlockChan:
+			cs.processCommitedBlock(ctx, commitedBlock)
 		case <-ctx.Done():
 			onExit(cs)
 			return
@@ -896,12 +998,6 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
 		added, err = cs.tryAddVote(ctx, msg.Vote, string(peerID))
 		if added {
-			select {
-			case cs.statsMsgQueue <- mi:
-			case <-ctx.Done():
-				return
-			}
-
 			cs.latestVoteMessageMap[msg.Vote.ValidatorAddress] = msg
 			// broadcast the vote to peer
 			cs.broadcastMessageToPeers(ctx, msg)
@@ -921,7 +1017,6 @@ func (cs *ConsensusState) handleMsg(ctx context.Context, mi MsgInfo) {
 	// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
 	// the peer is sending us CatchupCommit precommits.
 	// We could make note of this and help filter in broadcastHasVoteMessage().
-	case *ConsensusSyncRequest:
 
 	default:
 		log.Error("unknown msg type", "type", fmt.Sprintf("%T", msg))
@@ -1464,8 +1559,8 @@ func (cs *ConsensusState) enterCommit(ctx context.Context, height uint64, commit
 	if !cs.ProposalBlock.HashTo(blockID) {
 		log.Info(
 			"commit is for a block we do not know about; set ProposalBlock=nil",
-			"height", height, "commit_round", commitRound, "current",
-			"proposal", cs.ProposalBlock.Hash(),
+			"height", height, "commit_round", commitRound,
+			"proposal", cs.ProposalBlock.NilableHash(),
 			"commit", blockID[:],
 		)
 
@@ -1490,15 +1585,10 @@ func (cs *ConsensusState) tryFinalizeCommit(ctx context.Context, height uint64) 
 	if !cs.ProposalBlock.HashTo(blockID) {
 		// TODO: this happens every time if we're not a validator (ugly logs)
 		// TODO: ^^ wait, why does it matter that we're a validator?
-		var hash []byte
-		if cs.ProposalBlock != nil {
-			t := cs.ProposalBlock.Hash()
-			hash = t[:]
-		}
 		log.Debug(
 			"failed attempt to finalize commit; we do not have the commit block",
 			"height", height,
-			"proposal_block", hash,
+			"proposal_block", cs.ProposalBlock.NilableHash(),
 			"commit_block", blockID,
 		)
 		return
