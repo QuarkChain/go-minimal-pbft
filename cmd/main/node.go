@@ -144,7 +144,7 @@ func runNode(cmd *cobra.Command, args []string) {
 		log.Info("Validators", "vals", vals)
 	}
 
-	gcs := consensus.MakeGenesisChainState("test", *genesisTimeMs, vals, 128)
+	gcs := consensus.MakeGenesisChainState("test", *genesisTimeMs, vals, 128, 8)
 
 	db, err := leveldb.OpenFile(*datadir, &opt.Options{ErrorIfExist: true})
 	if err != nil {

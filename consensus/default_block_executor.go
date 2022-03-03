@@ -187,7 +187,7 @@ func updateState(
 	nValSet := state.NextValidators.Copy()
 
 	if len(nextValidators) != 0 {
-		nValSet = NewValidatorSet(nextValidators)
+		nValSet = NewValidatorSet(nextValidators, nValSet.ProposerReptition)
 	}
 
 	// Update validator proposer priority and set state variables.

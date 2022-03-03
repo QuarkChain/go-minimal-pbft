@@ -1085,7 +1085,9 @@ func (cs *ConsensusState) enterNewRound(ctx context.Context, height uint64, roun
 	validators := cs.Validators
 	if cs.Round < round {
 		validators = validators.Copy()
-		validators.IncrementProposerPriority(SafeSubInt32(round, cs.Round))
+		for i := uint64(0); i < uint64(validators.ProposerReptition); i++ {
+			validators.IncrementProposerPriority(SafeSubInt32(round, cs.Round))
+		}
 	}
 
 	// Setup new round
