@@ -14,6 +14,7 @@ import (
 	"github.com/QuarkChain/go-minimal-pbft/p2p"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
@@ -210,7 +211,7 @@ func runNode(cmd *cobra.Command, args []string) {
 	// TODO: what happen if the network advances to the next block after block sync?
 	consensusState := consensus.NewConsensusState(
 		rootCtx,
-		consensus.NewDefaultConsesusConfig(),
+		params.NewDefaultConsesusConfig(),
 		*gcs,
 		executor,
 		bs,

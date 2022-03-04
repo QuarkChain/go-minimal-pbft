@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 type (
@@ -20,6 +21,7 @@ type (
 	CommitSig       = types.CommitSig
 	Proposal        = types.Proposal
 	ProposalMessage = types.ProposalMessage
+	ConsensusConfig = params.ConsensusConfig
 
 	Header = types.Header
 
