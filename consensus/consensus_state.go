@@ -63,6 +63,7 @@ type BlockStore interface {
 type BlockExecutor interface {
 	ValidateBlock(ChainState, *FullBlock) error                             // validate the block by tentatively executing it
 	ApplyBlock(context.Context, ChainState, *FullBlock) (ChainState, error) // apply the block
+	MakeBlock(chainState *ChainState, height uint64, commit *Commit, proposerAddress common.Address) *FullBlock
 }
 
 // Consensus sentinel errors
@@ -194,7 +195,7 @@ func NewConsensusState(
 }
 
 func (cs *ConsensusState) defaultCreateBlock(height uint64, commit *Commit, proposerAddr common.Address) *FullBlock {
-	return cs.chainState.MakeBlock(height, commit, proposerAddr)
+	return cs.blockExec.MakeBlock(&cs.chainState, height, commit, proposerAddr)
 }
 
 // String returns a string.

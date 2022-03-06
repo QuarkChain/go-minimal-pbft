@@ -239,3 +239,13 @@ func updateState(
 		Epoch:           state.Epoch,
 	}, nil
 }
+
+func (be *DefaultBlockExecutor) MakeBlock(
+	chainState *ChainState, height uint64,
+	// txs []types.Tx,
+	commit *Commit,
+	// evidence []types.Evidence,
+	proposerAddress common.Address) *FullBlock {
+
+	return chainState.MakeBlock(height, commit, proposerAddress)
+}
