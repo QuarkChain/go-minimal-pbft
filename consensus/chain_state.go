@@ -115,7 +115,7 @@ func MakeChainState(
 	var nextVs *types.ValidatorSet
 	if len(nextValidators) == 0 {
 		// validator no change, use current ones
-		nextVs := vs.Copy()
+		nextVs = vs.Copy()
 		nextVs.IncrementProposerPriority(1)
 	} else {
 		nextVs = NewValidatorSet(nextValidators, nextVotingPowers, proposerReptition)
