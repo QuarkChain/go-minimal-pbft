@@ -99,37 +99,24 @@ func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs 
 
 func MakeChainState(
 	chainID string,
-	height uint64,
+	parentHeight uint64,
 	parentHash common.Hash,
 	parentTimeMs uint64,
-	validatorAddrs []common.Address,
-	votingPowers []int64,
-	nextValidators []common.Address,
-	nextVotingPowers []int64,
-	lastValidators []common.Address,
-	lastVotingPowers []int64,
+	lastValSet *ValidatorSet,
+	valSet *ValidatorSet,
+	nextValSet *ValidatorSet,
 	epoch uint64,
 	proposerReptition int64,
 ) *ChainState {
-	vs := NewValidatorSet(validatorAddrs, votingPowers, proposerReptition)
-	var nextVs *types.ValidatorSet
-	if len(nextValidators) == 0 {
-		// validator no change, use current ones
-		nextVs = vs.Copy()
-		nextVs.IncrementProposerPriority(1)
-	} else {
-		nextVs = NewValidatorSet(nextValidators, nextVotingPowers, proposerReptition)
-	}
-
 	return &ChainState{
 		ChainID:                     chainID,
 		InitialHeight:               1,
-		LastBlockHeight:             height,
+		LastBlockHeight:             parentHeight,
 		LastBlockID:                 parentHash,
 		LastBlockTime:               parentTimeMs,
-		Validators:                  vs,
-		NextValidators:              nextVs,
-		LastValidators:              NewValidatorSet(lastValidators, lastVotingPowers, proposerReptition),
+		Validators:                  valSet,
+		NextValidators:              nextValSet,
+		LastValidators:              lastValSet,
 		LastHeightValidatorsChanged: 1,
 		Epoch:                       epoch,
 	}
