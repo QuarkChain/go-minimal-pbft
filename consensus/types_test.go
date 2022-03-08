@@ -147,12 +147,39 @@ func TestSignProposal(t *testing.T) {
 	pubKey, err := pv.GetPubKey(context.Background())
 	assert.NoError(t, err)
 
+	c := CommitSig{
+		BlockIDFlag:      BlockIDFlagCommit,
+		ValidatorAddress: common.Address{},
+		TimestampMs:      1133423,
+		Signature:        []byte{},
+	}
+
+	cm := NewCommit(5, 6, common.Hash{}, []CommitSig{c})
+
 	proposal := Proposal{
 		Height:      20,
 		Round:       2,
 		POLRound:    -1,
 		TimestampMs: 352353,
 		Signature:   []byte{},
+		Block: &FullBlock{Block: types.NewBlock(
+			&Header{
+				ParentHash:     common.Hash{},
+				Number:         big.NewInt(6),
+				TimeMs:         34534,
+				Coinbase:       common.Address{},
+				LastCommitHash: common.Hash{},
+				Difficulty:     big.NewInt(1),
+				Extra:          []byte{},
+				BaseFee:        big.NewInt(2), // TODO
+				NextValidators: []common.Address{},
+			},
+			[]*types.Transaction{},
+			[]*types.Header{},
+			[]*types.Receipt{},
+			trie.NewStackTrie(nil)),
+			LastCommit: cm,
+		},
 	}
 
 	pv.SignProposal(context.Background(), "aaa", &proposal)
