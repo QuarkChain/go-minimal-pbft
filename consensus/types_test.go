@@ -3,6 +3,8 @@ package consensus
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -184,4 +186,79 @@ func TestSignProposal(t *testing.T) {
 
 	pv.SignProposal(context.Background(), "aaa", &proposal)
 	assert.True(t, pubKey.VerifySignature(proposal.ProposalSignBytes("aaa"), proposal.Signature))
+}
+
+func TestSignNilVote(t *testing.T) {
+	pv := GeneratePrivValidatorLocal()
+	pubKey, err := pv.GetPubKey(context.Background())
+	assert.NoError(t, err)
+
+	vote := &Vote{
+		ValidatorAddress: pubKey.Address(),
+		ValidatorIndex:   0,
+		Height:           6,
+		Round:            1,
+		TimestampMs:      1234,
+		Type:             PrecommitType,
+		BlockID:          common.Hash{},
+	}
+
+	assert.NoError(t, pv.SignVote(context.Background(), "test", vote))
+
+	commitSig := vote.CommitSig()
+	assert.False(t, commitSig.ForBlock())
+
+	assert.True(t, pubKey.VerifySignature(vote.VoteSignBytes("test"), commitSig.Signature))
+}
+
+func TestSignCommitWithNil(t *testing.T) {
+	n := 4
+	pv := make([]PrivValidator, n)
+	pk := make([]PubKey, n)
+	addrs := make([]common.Address, n)
+	powers := make([]int64, n)
+
+	for i := 0; i < n; i++ {
+		pv[i] = GeneratePrivValidatorLocal()
+		p, err := pv[i].GetPubKey(context.Background())
+		assert.NoError(t, err)
+		pk[i] = p
+
+		powers[i] = 1
+		addrs[i] = p.Address()
+	}
+
+	vals := NewValidatorSet(addrs, powers, 4)
+	vs := NewVoteSet("test", 1, 2, PrecommitType, vals)
+	blockHash := common.BytesToHash([]byte{1, 2, 3})
+	for i := 0; i < n; i++ {
+		var blockId common.Hash
+		if i != 0 {
+			blockId = blockHash
+		}
+		vote := &Vote{
+			ValidatorAddress: pk[i].Address(),
+			ValidatorIndex:   int32(i),
+			Height:           1,
+			Round:            2,
+			TimestampMs:      1234,
+			Type:             PrecommitType,
+			BlockID:          blockId,
+		}
+
+		assert.NoError(t, pv[i].SignVote(context.Background(), "test", vote))
+
+		if i == 0 {
+			fmt.Println(hex.EncodeToString(vote.VoteSignBytes("test")))
+		}
+
+		added, err := vs.AddVote(vote)
+		assert.NoError(t, err)
+		assert.True(t, added)
+	}
+
+	commit := vs.MakeCommit()
+
+	assert.NoError(t, vals.VerifyCommit(
+		"test", blockHash, 1, commit))
 }
