@@ -38,6 +38,10 @@ var (
 	genesisTimeMs *uint64
 	skipBlockSync *bool
 	powerStr      *string
+
+	timeoutCommitMs    *uint64
+	consensusSyncMs    *uint64
+	proposerRepetition *uint64
 )
 
 var NodeCmd = &cobra.Command{
@@ -64,6 +68,11 @@ func init() {
 	genesisTimeMs = NodeCmd.Flags().Uint64("genesisTimeMs", 0, "Genesis block timestamp")
 	skipBlockSync = NodeCmd.Flags().Bool("skipBlockSync", false, "Skip block sync")
 	powerStr = NodeCmd.Flags().String("valPowers", "", "comma seperated voting powers")
+
+	timeoutCommitMs = NodeCmd.Flags().Uint64("timeoutCommitMs", 5000, "Timeout commit in ms")
+	consensusSyncMs = NodeCmd.Flags().Uint64("consensusSyncMs", 500, "Consensus sync in ms")
+	proposerRepetition = NodeCmd.Flags().Uint64("proposerRepetition", 8, "proposer repetition")
+
 }
 
 func runNode(cmd *cobra.Command, args []string) {
@@ -171,7 +180,7 @@ func runNode(cmd *cobra.Command, args []string) {
 		log.Info("Validators", "vals", vals, "powers", powers)
 	}
 
-	gcs := consensus.MakeGenesisChainState("test", *genesisTimeMs, vals, powers, 128, 8)
+	gcs := consensus.MakeGenesisChainState("test", *genesisTimeMs, vals, powers, 128, int64(*proposerRepetition))
 
 	db, err := leveldb.OpenFile(*datadir, &opt.Options{ErrorIfExist: true})
 	if err != nil {
@@ -207,11 +216,14 @@ func runNode(cmd *cobra.Command, args []string) {
 		*gcs = bs.LastChainState()
 	}
 
+	p := params.NewDefaultConsesusConfig()
+	p.TimeoutCommit = time.Duration(*timeoutCommitMs) * time.Millisecond
+	p.ConsensusSyncRequestDuration = time.Duration(*consensusSyncMs) * time.Millisecond
+
 	// Block sync is done, now entering consensus stage
-	// TODO: what happen if the network advances to the next block after block sync?
 	consensusState := consensus.NewConsensusState(
 		rootCtx,
-		params.NewDefaultConsesusConfig(),
+		p,
 		*gcs,
 		executor,
 		bs,

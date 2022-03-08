@@ -625,13 +625,13 @@ func (cs *ConsensusState) ProcessSyncRequest(csq *ConsensusSyncRequest) ([]inter
 
 func appendDiffVotes(vs *VoteSet, bm []uint64, msgs []interface{}) []interface{} {
 	if len(bm) != 0 {
-		prevoteBA, err := types.NewBitArrayFromUint64(vs.Size(), bm)
+		votesBA, err := types.NewBitArrayFromUint64(vs.Size(), bm)
 		if err != nil {
 			// somewrong with bitmap size
 			return msgs
 		}
-		for i := 0; i < prevoteBA.Size(); i++ {
-			if prevoteBA.GetIndex(i) {
+		for i := 0; i < votesBA.Size(); i++ {
+			if votesBA.GetIndex(i) {
 				continue
 			}
 
@@ -675,8 +675,8 @@ func (cs *ConsensusState) processSyncRequest(csq *ConsensusSyncRequest) []interf
 	if csq.HasProposal == 0 && cs.Proposal != nil {
 		msgs = append(msgs, &types.ProposalMessage{Proposal: cs.Proposal})
 	}
-	msgs = appendDiffVotes(cs.Votes.Prevotes(cs.Round), csq.PrevotesBitmap, msgs)
-	msgs = appendDiffVotes(cs.Votes.Precommits(cs.Round), csq.PrecommitsBitmap, msgs)
+	msgs = appendDiffVotes(cs.Votes.Prevotes(int32(csq.Round)), csq.PrevotesBitmap, msgs)
+	msgs = appendDiffVotes(cs.Votes.Precommits(int32(csq.Round)), csq.PrecommitsBitmap, msgs)
 
 	return msgs
 }
