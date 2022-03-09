@@ -305,6 +305,8 @@ type Server struct {
 	rootCtxCancel     context.CancelFunc
 }
 
+var TestMode bool
+
 func NewP2PServer(
 	ctx context.Context,
 	blockStore consensus.BlockStore,
@@ -462,7 +464,7 @@ func NewP2PServer(
 	})
 
 	// TODO: continually reconnect to bootstrap nodes?
-	if successes == 0 && !bootstrapNode {
+	if !TestMode && successes == 0 && !bootstrapNode {
 		return nil, fmt.Errorf("failed to connect to any bootstrap peer")
 	} else {
 		log.Info("Connected to bootstrap peers", "num", successes)
