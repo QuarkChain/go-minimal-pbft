@@ -31,7 +31,6 @@ type ChainState struct {
 	// Note that if s.LastBlockHeight causes a valset change,
 	// we set s.LastHeightValidatorsChanged = s.LastBlockHeight + 1 + 1
 	// Extra +1 due to nextValSet delay.
-	NextValidators              *ValidatorSet
 	Validators                  *ValidatorSet
 	LastValidators              *ValidatorSet
 	LastHeightValidatorsChanged int64
@@ -63,7 +62,6 @@ func (state ChainState) Copy() ChainState {
 		LastBlockID:     state.LastBlockID,
 		LastBlockTime:   state.LastBlockTime,
 
-		NextValidators:              state.NextValidators.Copy(),
 		Validators:                  state.Validators.Copy(),
 		LastValidators:              state.LastValidators.Copy(),
 		LastHeightValidatorsChanged: state.LastHeightValidatorsChanged,
@@ -81,8 +79,6 @@ func (state ChainState) Copy() ChainState {
 
 func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs []common.Address, votingPowers []int64, epoch uint64, proposerReptition int64) *ChainState {
 	vs := NewValidatorSet(validatorAddrs, votingPowers, proposerReptition)
-	nextVs := vs.Copy()
-	nextVs.IncrementProposerPriority(1)
 	return &ChainState{
 		ChainID:                     chainID,
 		InitialHeight:               1,
@@ -90,7 +86,6 @@ func MakeGenesisChainState(chainID string, genesisTimeMs uint64, validatorAddrs 
 		LastBlockID:                 common.Hash{},
 		LastBlockTime:               genesisTimeMs,
 		Validators:                  vs,
-		NextValidators:              nextVs,
 		LastValidators:              &ValidatorSet{}, // not exist
 		LastHeightValidatorsChanged: 1,
 		Epoch:                       epoch,
@@ -104,7 +99,6 @@ func MakeChainState(
 	parentTimeMs uint64,
 	lastValSet *ValidatorSet,
 	valSet *ValidatorSet,
-	nextValSet *ValidatorSet,
 	epoch uint64,
 	proposerReptition int64,
 ) *ChainState {
@@ -115,7 +109,6 @@ func MakeChainState(
 		LastBlockID:                 parentHash,
 		LastBlockTime:               parentTimeMs,
 		Validators:                  valSet,
-		NextValidators:              nextValSet,
 		LastValidators:              lastValSet,
 		LastHeightValidatorsChanged: 1,
 		Epoch:                       epoch,

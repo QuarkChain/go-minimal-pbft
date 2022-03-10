@@ -184,56 +184,26 @@ func updateState(
 	nextVotingPowers []int64,
 ) (ChainState, error) {
 
-	// Copy the valset so we can apply changes from EndBlock
-	// and update s.LastValidators and s.Validators.
-	nValSet := state.NextValidators.Copy()
+	var nValSet *ValidatorSet
 
 	if len(nextValidators) != 0 {
-		// TODO: sanity check
+		if len(nextValidators) != len(nextVotingPowers) {
+			panic("len(nextValidators) != len(nextVotingPowers)")
+		}
 		nValSet = NewValidatorSet(nextValidators, nextVotingPowers, nValSet.ProposerReptition)
+	} else {
+		nValSet = state.Validators.Copy()
+		// Update validator proposer priority and set state variables.
+		nValSet.IncrementProposerPriority(1)
 	}
 
-	// Update validator proposer priority and set state variables.
-	nValSet.IncrementProposerPriority(1)
-
-	// // Update the validator set with the latest abciResponses.
-	// lastHeightValsChanged := state.LastHeightValidatorsChanged
-	// if len(validatorUpdates) > 0 {
-	// 	err := nValSet.UpdateWithChangeSet(validatorUpdates)
-	// 	if err != nil {
-	// 		return state, fmt.Errorf("error changing validator set: %v", err)
-	// 	}
-	// 	// Change results from this height but only applies to the next next height.
-	// 	lastHeightValsChanged = header.Height + 1 + 1
-	// }
-
-	// Update the params with the latest abciResponses.
-	// nextParams := state.ConsensusParams
-	// lastHeightParamsChanged := state.LastHeightConsensusParamsChanged
-	// if abciResponses.EndBlock.ConsensusParamUpdates != nil {
-	// 	// NOTE: must not mutate s.ConsensusParams
-	// 	nextParams = state.ConsensusParams.UpdateConsensusParams(abciResponses.EndBlock.ConsensusParamUpdates)
-	// 	err := nextParams.ValidateConsensusParams()
-	// 	if err != nil {
-	// 		return state, fmt.Errorf("error updating consensus params: %v", err)
-	// 	}
-
-	// 	state.Version.App = nextParams.Version.AppVersion
-
-	// 	// Change results from this height but only applies to the next height.
-	// 	lastHeightParamsChanged = header.Height + 1
-	// }
-
-	// NOTE: the AppHash has not been populated.
-	// It will be filled on state.Save.
 	return ChainState{
 		ChainID:         state.ChainID,
 		InitialHeight:   state.InitialHeight,
 		LastBlockHeight: block.NumberU64(),
 		LastBlockID:     blockID,
 		LastBlockTime:   block.TimeMs(),
-		NextValidators:  nValSet,
-		Validators:      state.NextValidators.Copy(),
+		Validators:      nValSet,
 		LastValidators:  state.Validators.Copy(),
 		AppHash:         nil,
 		Epoch:           state.Epoch,
