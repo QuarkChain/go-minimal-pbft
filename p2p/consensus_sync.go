@@ -29,6 +29,7 @@ func (s *Server) consensSyncRoutine() {
 			go func() {
 				log.Debug("sending consensus sync", "req", localSyncReq, "peer", p)
 				if err := SendRPC(s.ctx, s.Host, p, TopicConsensusSync, localSyncReq, resp); err != nil {
+					log.Warn("failed to send consensus sync", "err", err)
 					// Mark as bad peer and disconnect from peer?
 					return
 				}
@@ -36,12 +37,14 @@ func (s *Server) consensSyncRoutine() {
 				if resp.IsCommited == 1 {
 					if len(resp.MessageData) != 1 {
 						// Mark as bad peer and disconnect from peer?
+						log.Warn("failed to decode committed block", "err", "unexpected data received")
 						return
 					}
 
 					block := &consensus.FullBlock{}
 					err := block.DecodeFromRLPBytes(resp.MessageData[0])
 					if err != nil {
+						log.Warn("failed to decode committed block", "err", err)
 						// Mark as bad peer and disconnect from peer?
 						return
 					}

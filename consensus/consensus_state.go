@@ -529,13 +529,13 @@ func (cs *ConsensusState) processCommitedBlock(ctx context.Context, block *FullB
 
 	// fast-path for commit
 	if err := cs.blockExec.ValidateBlock(cs.chainState, block); err != nil {
-		log.Info("validate eorr")
+		log.Info("processCommitBlock validate err", "err", err)
 		return
 	}
 
 	if err := cs.chainState.Validators.VerifyCommit(
 		cs.chainState.ChainID, block.Hash(), block.NumberU64(), block.Header().Commit); err != nil {
-		log.Info("verify error")
+		log.Info("processCommitBlock verify error", "err", err)
 		return
 	}
 
