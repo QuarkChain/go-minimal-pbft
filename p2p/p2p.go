@@ -341,9 +341,9 @@ func NewP2PServer(
 		// Let's prevent our peer from having too many
 		// connections by attaching a connection manager.
 		libp2p.ConnectionManager(connmgr.NewConnManager(
-			maxPeerCount, // Lowwater
-			400,          // HighWater,
-			time.Minute,  // GracePeriod
+			100,         // Lowwater
+			400,         // HighWater,
+			time.Minute, // GracePeriod
 		)),
 
 		// Let this host use the DHT to find other hosts
