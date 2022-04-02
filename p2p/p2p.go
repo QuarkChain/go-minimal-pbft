@@ -318,6 +318,7 @@ func NewP2PServer(
 	bootstrapPeers string,
 	nodeName string,
 	rootCtxCancel context.CancelFunc,
+	maxPeerCount int,
 ) (*Server, error) {
 	h, err := libp2p.New(ctx,
 		// Use the keypair we generated
@@ -340,13 +341,14 @@ func NewP2PServer(
 		// Let's prevent our peer from having too many
 		// connections by attaching a connection manager.
 		libp2p.ConnectionManager(connmgr.NewConnManager(
-			100,         // Lowwater
-			400,         // HighWater,
-			time.Minute, // GracePeriod
+			maxPeerCount, // Lowwater
+			400,          // HighWater,
+			time.Minute,  // GracePeriod
 		)),
 
 		// Let this host use the DHT to find other hosts
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+			h = WrapHost(h, maxPeerCount)
 			// TODO(leo): Persistent data store (i.e. address book)
 			idht, err := dht.New(ctx, h, dht.Mode(dht.ModeServer),
 				// TODO(leo): This intentionally makes us incompatible with the global IPFS DHT
@@ -362,6 +364,7 @@ func NewP2PServer(
 
 	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
+	h = WrapHost(h, maxPeerCount)
 	// Add our own bootstrap nodes
 
 	// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill
