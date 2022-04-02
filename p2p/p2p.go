@@ -352,8 +352,7 @@ func NewP2PServer(
 				// TODO(leo): This intentionally makes us incompatible with the global IPFS DHT
 				dht.ProtocolPrefix(protocol.ID("/"+networkID)),
 			)
-			wdht := Wrap(h, idht, 2)
-			return wdht, err
+			return idht, err
 		}),
 	)
 
@@ -363,7 +362,6 @@ func NewP2PServer(
 
 	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
-	h = WrapHost(h, 10)
 	// Add our own bootstrap nodes
 
 	// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill
