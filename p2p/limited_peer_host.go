@@ -27,10 +27,12 @@ func (h *LimitedPeerHost) Connect(ctx context.Context, pi peer.AddrInfo) error {
 	log.Info("LimitedPeerHost Connect func", "PeerId", pi.ID, "Peer Count", h.Peerstore().Peers().Len())
 	// first, check if we're already connected.
 	if h.Network().Connectedness(pi.ID) == network.Connected {
+		log.Info("LimitedPeerHost Connect func, peer exist.", "PeerId", pi.ID)
 		return nil
 	}
 
 	if h.Peerstore().Peers().Len() > h.limit {
+		log.Info("LimitedPeerHost Connect func", "limit", h.limit, "Peer Count", h.Peerstore().Peers().Len())
 		return fmt.Errorf("PeerCount %d exceeds the limit %d.\r\n", h.Peerstore().Peers().Len(), h.limit)
 	}
 
