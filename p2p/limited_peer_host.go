@@ -9,31 +9,40 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
+const (
+	// High watermark buffer signifies the buffer till which
+	// we will handle inbound requests.
+	highWatermarkBuffer = 10
+)
+
 type p2pHost host.Host
 
 type LimitedPeerHost struct {
 	p2pHost
-	limit int
+	MaxPeers int
 }
 
-func WrapHost(h p2pHost, limit int) *LimitedPeerHost {
+func WrapHost(h p2pHost, maxPeers int) *LimitedPeerHost {
 	return &LimitedPeerHost{
-		p2pHost: h,
-		limit:   limit,
+		p2pHost:  h,
+		MaxPeers: maxPeers,
 	}
 }
 
 func (h *LimitedPeerHost) Connect(ctx context.Context, pi peer.AddrInfo) error {
-	log.Info("LimitedPeerHost Connect func", "PeerId", pi.ID, "Peer Count", h.Peerstore().Peers().Len())
+	log.Info("LimitedPeerHost Connect func", "PeerId", pi.ID, "Peer Count", len(h.Network().Peers()))
 	// first, check if we're already connected.
 	if h.Network().Connectedness(pi.ID) == network.Connected {
 		log.Info("LimitedPeerHost Connect func, peer exist.", "PeerId", pi.ID)
 		return nil
 	}
 
-	if h.Peerstore().Peers().Len() > h.limit {
-		log.Info("LimitedPeerHost Connect func", "limit", h.limit, "Peer Count", h.Peerstore().Peers().Len())
-		return fmt.Errorf("PeerCount %d exceeds the limit %d.\r\n", h.Peerstore().Peers().Len(), h.limit)
+	if len(h.Network().Peers()) > h.MaxPeers {
+		log.Info("LimitedPeerHost Connect func", "limit", h.MaxPeers, "Peer Count", len(h.Network().Peers()))
+		for index, p := range h.Network().Peers() {
+			log.Info("Peer List", "index", index, "peer id", p.String(), "connected", h.Network().Connectedness(p))
+		}
+		return fmt.Errorf("PeerCount %d exceeds the limit %d.\r\n", len(h.Network().Peers()), h.MaxPeers)
 	}
 
 	return h.p2pHost.Connect(ctx, pi)
