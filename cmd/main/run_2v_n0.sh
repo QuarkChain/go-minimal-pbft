@@ -8,5 +8,7 @@ rm -rf ./datadir_2v_n0 &&  \
   --genesisTimeMs 1 \
   --validatorSet=0x564D965830b6081506c6de0625F089F751Af134a \
   --validatorSet=0x0a700e9B59d92259C68E50a978c851214916BE52 \
+  --validatorSet=0x00D6bF1DbB497e8C638330ffb351B21F950934e0 \
   --bootstrap /ip4/127.0.0.1/udp/8999/quic/p2p/12D3KooWEZ94qZgJgUNYiLwXahknkniYgozxw5eocijZJkew6Mj5 \
+  --maxPeerCount 1 \
   $@
