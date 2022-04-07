@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/libp2p/go-libp2p"
+	"github.com/multiformats/go-multiaddr"
 	"io"
 	"strings"
 	"time"
@@ -12,7 +14,6 @@ import (
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -25,8 +26,7 @@ import (
 	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
 	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 	libp2ptls "github.com/libp2p/go-libp2p-tls"
-	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
-	"github.com/multiformats/go-multiaddr"
+	mdns "github.com/libp2p/go-libp2p/p2p/discovery"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -319,7 +319,7 @@ func NewP2PServer(
 	rootCtxCancel context.CancelFunc,
 	maxPeerCount int,
 ) (*Server, error) {
-	h, err := libp2p.New(
+	h, err := libp2p.New(ctx,
 		// Use the keypair we generated
 		libp2p.Identity(priv),
 
@@ -362,7 +362,7 @@ func NewP2PServer(
 
 	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
-	setupDiscovery(h, maxPeerCount)
+	setupDiscovery(ctx, h, maxPeerCount)
 	// Add our own bootstrap nodes
 
 	// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill
@@ -726,8 +726,13 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 
 // setupDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
-func setupDiscovery(h host.Host, maxPeerCount int) error {
+func setupDiscovery(ctx context.Context, h host.Host, maxPeerCount int) error {
+	n := &discoveryNotifee{h: h, MaxPeerCount: maxPeerCount}
 	// setup mDNS discovery to find local peers
-	s := mdns.NewMdnsService(h, DiscoveryServiceTag, &discoveryNotifee{h: h, MaxPeerCount: maxPeerCount})
-	return s.Start()
+	discovery, err := mdns.NewMdnsService(ctx, h, time.Duration(5)*time.Second, DiscoveryServiceTag)
+	if err != nil {
+		return err
+	}
+	discovery.RegisterNotifee(n)
+	return nil
 }
