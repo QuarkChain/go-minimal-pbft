@@ -709,14 +709,12 @@ type discoveryNotifee struct {
 // support PubSub.
 func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	if n.h.Network().Connectedness(pi.ID) == network.Connected {
-		fmt.Printf("discovered connected peer %s\n", pi.ID.Pretty())
+		fmt.Printf("discovered connected peer %s\r\n", pi.ID.Pretty())
 		return
 	}
-	fmt.Printf("discovered new peer %s\n", pi.ID.Pretty())
 
-	log.Info("discoveryNotifee Listen func", "laddr", pi.ID, "Peer Count", len(n.h.Network().Peers()))
+	log.Info("discovered new peer", "laddr", pi.ID, "Peer Count", len(n.h.Network().Peers()))
 	if len(n.h.Network().Peers()) >= n.MaxPeerCount {
-		log.Info("discoveryNotifee Listen func", "MaxPeerCount", n.MaxPeerCount, "Peer Count", len(n.h.Network().Peers()))
 		for index, p := range n.h.Network().Peers() {
 			log.Info("Peer List", "index", index, "peer id", p.String(), "connected", n.h.Network().Connectedness(p))
 		}
@@ -726,7 +724,7 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 
 	err := n.h.Connect(context.Background(), pi)
 	if err != nil {
-		fmt.Printf("error connecting to peer %s: %s\n", pi.ID.Pretty(), err)
+		fmt.Printf("error connecting to peer %s: %s\r\n", pi.ID.Pretty(), err)
 	}
 }
 
