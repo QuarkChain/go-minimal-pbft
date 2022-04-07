@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/libp2p/go-libp2p"
+	"github.com/multiformats/go-multiaddr"
 	"io"
 	"strings"
 	"time"
@@ -12,23 +14,21 @@ import (
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
-	"github.com/multiformats/go-multiaddr"
-
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/libp2p/go-libp2p-core/routing"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
+	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 	libp2ptls "github.com/libp2p/go-libp2p-tls"
+	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"go.uber.org/zap"
 )
 
@@ -319,7 +319,7 @@ func NewP2PServer(
 	nodeName string,
 	rootCtxCancel context.CancelFunc,
 ) (*Server, error) {
-	h, err := libp2p.New(ctx,
+	h, err := libp2p.New(
 		// Use the keypair we generated
 		libp2p.Identity(priv),
 
@@ -362,6 +362,7 @@ func NewP2PServer(
 
 	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
+	setupDiscovery(h, 1)
 	// Add our own bootstrap nodes
 
 	// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill
@@ -692,4 +693,41 @@ func (server *Server) SetConsensusState(cs *consensus.ConsensusState) {
 	})
 
 	go server.consensSyncRoutine()
+}
+
+// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
+const DiscoveryServiceTag = "go-minimal-pdft"
+
+// discoveryNotifee gets notified when we find a new peer via mDNS discovery
+type discoveryNotifee struct {
+	h            host.Host
+	MaxPeerCount int
+}
+
+// HandlePeerFound connects to peers discovered via mDNS. Once they're connected,
+// the PubSub system will automatically start interacting with them if they also
+// support PubSub.
+func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
+	log.Info("LimitedPeerTransport Listen func", "laddr", pi.ID, "Peer Count", len(n.h.Network().Peers()))
+	if len(n.h.Network().Peers()) >= n.MaxPeerCount {
+		log.Info("LimitedPeerTransport Listen func", "MaxPeerCount", n.MaxPeerCount, "Peer Count", len(n.h.Network().Peers()))
+		for index, p := range n.h.Network().Peers() {
+			log.Info("Peer List", "index", index, "peer id", p.String(), "connected", n.h.Network().Connectedness(p))
+		}
+		log.Error("PeerCount %d exceeds the MaxPeerCount %d.\r\n", len(n.h.Network().Peers()), n.MaxPeerCount)
+	}
+
+	fmt.Printf("discovered new peer %s\n", pi.ID.Pretty())
+	err := n.h.Connect(context.Background(), pi)
+	if err != nil {
+		fmt.Printf("error connecting to peer %s: %s\n", pi.ID.Pretty(), err)
+	}
+}
+
+// setupDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
+// This lets us automatically discover peers on the same LAN and connect to them.
+func setupDiscovery(h host.Host, maxPeerCount int) error {
+	// setup mDNS discovery to find local peers
+	s := mdns.NewMdnsService(h, DiscoveryServiceTag, &discoveryNotifee{h: h, MaxPeerCount: maxPeerCount})
+	return s.Start()
 }
