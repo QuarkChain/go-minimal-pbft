@@ -5,17 +5,14 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/libp2p/go-libp2p"
-	"github.com/multiformats/go-multiaddr"
 	"io"
 	"strings"
 	"time"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -29,6 +26,8 @@ import (
 	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 	libp2ptls "github.com/libp2p/go-libp2p-tls"
 	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	"github.com/multiformats/go-multiaddr"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -318,6 +317,7 @@ func NewP2PServer(
 	bootstrapPeers string,
 	nodeName string,
 	rootCtxCancel context.CancelFunc,
+	maxPeerCount int,
 ) (*Server, error) {
 	h, err := libp2p.New(
 		// Use the keypair we generated
@@ -362,7 +362,7 @@ func NewP2PServer(
 
 	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
-	setupDiscovery(h, 1)
+	setupDiscovery(h, maxPeerCount)
 	// Add our own bootstrap nodes
 
 	// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill
