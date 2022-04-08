@@ -709,16 +709,17 @@ type discoveryNotifee struct {
 // support PubSub.
 func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	if n.h.Network().Connectedness(pi.ID) == network.Connected {
-		fmt.Printf("discovered connected peer %s\r\n", pi.ID.Pretty())
+		log.Info("discovered connected peer", "peer id", pi.ID, "Peer Count", len(n.h.Network().Peers()))
 		return
 	}
 
-	log.Info("discovered new peer", "laddr", pi.ID, "Peer Count", len(n.h.Network().Peers()))
+	log.Info("discovered new peer", "peer id", pi.ID, "Peer Count", len(n.h.Network().Peers()))
 	if len(n.h.Network().Peers()) >= n.MaxPeerCount {
 		for index, p := range n.h.Network().Peers() {
 			log.Info("Peer List", "index", index, "peer id", p.String(), "connected", n.h.Network().Connectedness(p))
 		}
-		log.Error("PeerCount exceeds the MaxPeerCount.\r\n", "PeerCount", len(n.h.Network().Peers()), "MaxPeerCount", n.MaxPeerCount)
+		log.Error("PeerCount exceeds the MaxPeerCount.\r\n", "PeerCount",
+			len(n.h.Network().Peers()), "MaxPeerCount", n.MaxPeerCount)
 		return
 	}
 
