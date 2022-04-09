@@ -9,12 +9,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
-const (
-	// High watermark buffer signifies the buffer till which
-	// we will handle inbound requests.
-	highWatermarkBuffer = 10
-)
-
 type p2pHost host.Host
 
 type LimitedPeerHost struct {
