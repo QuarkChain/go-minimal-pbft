@@ -367,6 +367,7 @@ func NewP2PServer(
 	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
 	h = WrapHost(h, maxPeerCount)
+	cg.h = h
 	// Add our own bootstrap nodes
 
 	// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill

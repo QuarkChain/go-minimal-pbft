@@ -35,10 +35,12 @@ func (cg *connGater) isPeerAtLimit() bool {
 }
 
 func (cg *connGater) InterceptPeerDial(p peer.ID) (allow bool) {
+	log.Info("InterceptPeerDial", "peer id", p)
 	return cg.h.Network().Connectedness(p) == network.Connected || !cg.isPeerAtLimit()
 }
 
 func (cg *connGater) InterceptAddrDial(p peer.ID, a ma.Multiaddr) (allow bool) {
+	log.Info("InterceptPeerDial", "peer id", p)
 	return cg.h.Network().Connectedness(p) == network.Connected || !cg.isPeerAtLimit()
 }
 
@@ -47,6 +49,7 @@ func (cg *connGater) InterceptAccept(cma network.ConnMultiaddrs) (allow bool) {
 }
 
 func (cg *connGater) InterceptSecured(dir network.Direction, p peer.ID, cma network.ConnMultiaddrs) (allow bool) {
+	log.Info("InterceptPeerDial", "peer id", p)
 	return cg.h.Network().Connectedness(p) == network.Connected || !cg.isPeerAtLimit()
 }
 
