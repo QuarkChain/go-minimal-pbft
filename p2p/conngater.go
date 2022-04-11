@@ -17,17 +17,23 @@ type connGater struct {
 	MaxPeerCount int
 }
 
+func (cg *connGater) getConnectedPeerCount() int {
+	c := 0
+	if cg.h != nil {
+		for index, p := range cg.h.Network().Peers() {
+			if cg.h.Network().Connectedness(p) == network.Connected {
+				log.Debug("Connected Peer List", "index", index, "peer id", p.String())
+				c++
+			}
+		}
+	}
+	return c
+}
+
 func (cg *connGater) isPeerAtLimit() bool {
 	cg.RLock()
 	defer cg.RUnlock()
-	if cg == nil {
-		return false
-	}
-	if len(cg.h.Network().Peers()) >= cg.MaxPeerCount {
-		log.Info("isPeerAtLimit", "MaxPeerCount", cg.MaxPeerCount, "Peer Count", len(cg.h.Network().Peers()))
-		for index, p := range cg.h.Network().Peers() {
-			log.Info("Peer List", "index", index, "peer id", p.String(), "connected", cg.h.Network().Connectedness(p))
-		}
+	if cg.getConnectedPeerCount() >= cg.MaxPeerCount {
 		log.Error(fmt.Sprintf("PeerCount %d exceeds the MaxPeerCount %d.\r\n", len(cg.h.Network().Peers()), cg.MaxPeerCount))
 		return true
 	}
