@@ -350,7 +350,6 @@ func NewP2PServer(
 
 		// Let this host use the DHT to find other hosts
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
-			//			h = WrapHost(h, maxPeerCount)
 			// TODO(leo): Persistent data store (i.e. address book)
 			idht, err := dht.New(ctx, h, dht.Mode(dht.ModeServer),
 				// TODO(leo): This intentionally makes us incompatible with the global IPFS DHT
@@ -366,7 +365,6 @@ func NewP2PServer(
 
 	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
-	//	h = WrapHost(h, maxPeerCount)
 	cg.h = h
 	// Add our own bootstrap nodes
 
