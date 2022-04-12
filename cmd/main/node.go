@@ -74,7 +74,7 @@ func init() {
 	consensusSyncMs = NodeCmd.Flags().Uint64("consensusSyncMs", 500, "Consensus sync in ms")
 	proposerRepetition = NodeCmd.Flags().Uint64("proposerRepetition", 8, "proposer repetition")
 
-	maxPeerCount = NodeCmd.Flags().Int("maxPeerCount", 10, "proposer repetition")
+	maxPeerCount = NodeCmd.Flags().Int("maxPeerCount", 10, "The maximum number of peers connected")
 }
 
 func runNode(cmd *cobra.Command, args []string) {
