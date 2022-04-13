@@ -34,7 +34,7 @@ func (cg *connGater) isPeerAtLimit() bool {
 	cg.RLock()
 	defer cg.RUnlock()
 	if cg.getConnectedPeerCount() >= cg.MaxPeerCount {
-		log.Error(fmt.Sprintf("PeerCount %d exceeds the MaxPeerCount %d.\r\n", len(cg.h.Network().Peers()), cg.MaxPeerCount))
+		log.Info(fmt.Sprintf("PeerCount %d exceeds the MaxPeerCount %d.\r\n", len(cg.h.Network().Peers()), cg.MaxPeerCount))
 		return true
 	}
 	return false
