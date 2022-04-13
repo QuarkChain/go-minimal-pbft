@@ -10,25 +10,23 @@ import (
 	"time"
 
 	"github.com/QuarkChain/go-minimal-pbft/consensus"
-	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
-	"github.com/multiformats/go-multiaddr"
-
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/libp2p/go-libp2p-core/routing"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
+	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 	libp2ptls "github.com/libp2p/go-libp2p-tls"
+	"github.com/multiformats/go-multiaddr"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -318,7 +316,10 @@ func NewP2PServer(
 	bootstrapPeers string,
 	nodeName string,
 	rootCtxCancel context.CancelFunc,
+	maxPeerCount int,
 ) (*Server, error) {
+	cg := &connGater{h: nil, MaxPeerCount: maxPeerCount}
+
 	h, err := libp2p.New(ctx,
 		// Use the keypair we generated
 		libp2p.Identity(priv),
@@ -331,6 +332,8 @@ func NewP2PServer(
 			fmt.Sprintf("/ip6/::/udp/%d/quic", port),
 		),
 
+		libp2p.ConnectionGater(cg),
+
 		// Enable TLS security as the only security protocol.
 		libp2p.Security(libp2ptls.ID, libp2ptls.New),
 
@@ -340,9 +343,9 @@ func NewP2PServer(
 		// Let's prevent our peer from having too many
 		// connections by attaching a connection manager.
 		libp2p.ConnectionManager(connmgr.NewConnManager(
-			100,         // Lowwater
-			400,         // HighWater,
-			time.Minute, // GracePeriod
+			int(maxPeerCount*3/4), // Lowwater
+			maxPeerCount,          // HighWater,
+			time.Minute,           // GracePeriod
 		)),
 
 		// Let this host use the DHT to find other hosts
@@ -362,6 +365,7 @@ func NewP2PServer(
 
 	log.Info("Connecting to bootstrap peers", "bootstrap_peers", bootstrapPeers)
 
+	cg.h = h
 	// Add our own bootstrap nodes
 
 	// Count number of successful connection attempts. If we fail to connect to any bootstrap peer, kill
